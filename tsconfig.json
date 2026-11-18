@@ -1,6 +1,23 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "next/navigation": ["./src/shims/next-navigation.ts"],
+      "next/link": ["./src/shims/next-link.tsx"],
+      "next/image": ["./src/shims/next-image.tsx"],
+      "sonner": ["./src/shims/sonner.ts"],
+      "lucide-react": ["./node_modules/lucide-react-native"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+  ]
 }

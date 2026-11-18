@@ -1,0 +1,136 @@
+/**
+ * Joya Energy — Design tokens (app)
+ * Source of truth: joya-energy landing handoff (`_handoff-tokens.scss`).
+ * Every colour also exists as an `*-rgb` triplet so Tailwind can apply opacity
+ * (`bg-coral/10`). Do not hardcode hex values in components: use these tokens
+ * through Tailwind (`bg-coral`, `text-navy`, `border-line`…) or `var(--joya-*)`.
+ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────── */
+  --joya-coral-rgb: 227 112 81; /* #E37051 */
+  --joya-coral-dark-rgb: 200 90 60; /* #C85A3C */
+  --joya-coral-tint-rgb: 251 228 218; /* #FBE4DA */
+  --joya-coral-soft-rgb: 255 241 235; /* #FFF1EB */
+  --joya-coral-wash-rgb: 255 247 243; /* #FFF7F3 */
+
+  --joya-navy-rgb: 23 59 94; /* #173B5E */
+  --joya-navy-dark-rgb: 15 42 68; /* #0F2A44 */
+  --joya-navy-deep-rgb: 10 29 48; /* #0A1D30 */
+  --joya-blue-rgb: 61 102 144; /* #3D6690 */
+  --joya-blue-tint-rgb: 234 241 249; /* #EAF1F9 */
+  --joya-blue-soft-rgb: 242 246 251; /* #F2F6FB */
+
+  --joya-cream-rgb: 255 250 246; /* #FFFAF6 */
+  --joya-cream-2-rgb: 252 243 234; /* #FCF3EA */
+  --joya-white-rgb: 255 255 255;
+
+  /* ── Semantic ──────────────────────────────────────────── */
+  --joya-success-rgb: 31 138 91; /* #1F8A5B */
+  --joya-success-strong-rgb: 22 106 70; /* #166A46 */
+  --joya-success-soft-rgb: 228 243 236; /* #E4F3EC */
+  --joya-warning-rgb: 194 124 14; /* #C27C0E */
+  --joya-warning-strong-rgb: 143 90 6; /* #8F5A06 */
+  --joya-warning-soft-rgb: 252 241 220; /* #FCF1DC */
+  --joya-danger-rgb: 198 40 40; /* #C62828 (landing --err) */
+  --joya-danger-strong-rgb: 161 31 31; /* #A11F1F */
+  --joya-danger-soft-rgb: 251 231 230; /* #FBE7E6 */
+  --joya-info-rgb: var(--joya-blue-rgb);
+  --joya-info-soft-rgb: var(--joya-blue-tint-rgb);
+  /* Sun / irradiation only */
+  --joya-sun-rgb: 232 168 56; /* #E8A838 */
+
+  /* ── Named colours (for SVG / inline styles) ───────────── */
+  --joya-coral: rgb(var(--joya-coral-rgb));
+  --joya-coral-dark: rgb(var(--joya-coral-dark-rgb));
+  --joya-coral-tint: rgb(var(--joya-coral-tint-rgb));
+  --joya-coral-soft: rgb(var(--joya-coral-soft-rgb));
+  --joya-navy: rgb(var(--joya-navy-rgb));
+  --joya-navy-dark: rgb(var(--joya-navy-dark-rgb));
+  --joya-blue: rgb(var(--joya-blue-rgb));
+  --joya-blue-tint: rgb(var(--joya-blue-tint-rgb));
+  --joya-cream: rgb(var(--joya-cream-rgb));
+  --joya-cream-2: rgb(var(--joya-cream-2-rgb));
+  --joya-success: rgb(var(--joya-success-rgb));
+  --joya-warning: rgb(var(--joya-warning-rgb));
+  --joya-danger: rgb(var(--joya-danger-rgb));
+  --joya-sun: rgb(var(--joya-sun-rgb));
+
+  /* ── Surfaces & text ───────────────────────────────────── */
+  --joya-background: var(--joya-cream);
+  --joya-surface: #ffffff;
+  --joya-surface-muted: var(--joya-cream-2);
+  --joya-text: var(--joya-navy);
+  --joya-text-strong: var(--joya-navy-dark);
+  --joya-muted: rgb(var(--joya-navy-rgb) / 0.66);
+  --joya-faint: rgb(var(--joya-navy-rgb) / 0.48);
+  --joya-border: rgb(var(--joya-navy-rgb) / 0.1);
+  --joya-border-strong: rgb(var(--joya-navy-rgb) / 0.2);
+
+  /* ── Charts (limited, meaningful palette) ──────────────── */
+  --joya-chart-1: var(--joya-coral); /* production / highlight */
+  --joya-chart-2: var(--joya-navy); /* reference / actual */
+  --joya-chart-3: var(--joya-blue); /* comparison / secondary */
+  --joya-chart-4: rgb(var(--joya-navy-rgb) / 0.32); /* previous period */
+  --joya-chart-sun: var(--joya-sun);
+  --joya-chart-grid: rgb(var(--joya-navy-rgb) / 0.08);
+  --joya-chart-axis: rgb(var(--joya-navy-rgb) / 0.5);
+
+  /* ── Typography ────────────────────────────────────────── */
+  --joya-font-display: var(--font-archivo), "Archivo", system-ui, sans-serif;
+  --joya-font-body: var(--font-inter), "Inter", system-ui, sans-serif;
+  --joya-font-data: var(--font-plex-mono), "IBM Plex Mono", ui-monospace,
+    monospace;
+
+  /* ── Spacing scale (4px base) ──────────────────────────── */
+  --joya-space-1: 4px;
+  --joya-space-2: 8px;
+  --joya-space-3: 12px;
+  --joya-space-4: 16px;
+  --joya-space-5: 20px;
+  --joya-space-6: 24px;
+  --joya-space-8: 32px;
+  --joya-space-10: 40px;
+  --joya-space-12: 48px;
+
+  /* ── Radius ────────────────────────────────────────────── */
+  --joya-radius-xs: 6px;
+  --joya-radius-sm: 10px;
+  --joya-radius-md: 14px;
+  --joya-radius-lg: 18px;
+  --joya-radius-xl: 22px;
+  --joya-radius-2xl: 28px;
+  --joya-radius-pill: 999px;
+
+  /* ── Shadows (always navy-tinted, never black) ─────────── */
+  --joya-shadow-xs: 0 1px 2px rgb(var(--joya-navy-rgb) / 0.06);
+  --joya-shadow-sm: 0 1px 2px -1px rgb(var(--joya-navy-rgb) / 0.1),
+    0 6px 16px -8px rgb(var(--joya-navy-rgb) / 0.12);
+  --joya-shadow-md: 0 2px 4px -2px rgb(var(--joya-navy-rgb) / 0.12),
+    0 16px 32px -16px rgb(var(--joya-navy-rgb) / 0.2);
+  --joya-shadow-lg: 0 2px 4px -2px rgb(var(--joya-navy-rgb) / 0.14),
+    0 24px 48px -20px rgb(var(--joya-navy-rgb) / 0.26);
+  --joya-shadow-coral: 0 14px 28px -14px rgb(var(--joya-coral-rgb) / 0.55);
+  --joya-ring: 0 0 0 3px rgb(var(--joya-coral-rgb) / 0.2);
+
+  /* ── Motion ────────────────────────────────────────────── */
+  --joya-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --joya-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --joya-duration-fast: 150ms;
+  --joya-duration-base: 220ms;
+  --joya-duration-slow: 420ms;
+
+  /* ── Layout ────────────────────────────────────────────── */
+  --joya-sidebar-width: 264px;
+  --joya-sidebar-collapsed: 84px;
+  --joya-header-height: 68px;
+  --joya-content-max: 1440px;
+
+  /* ── Z-index ───────────────────────────────────────────── */
+  --joya-z-base: 0;
+  --joya-z-sticky: 30;
+  --joya-z-nav: 40;
+  --joya-z-overlay: 50;
+  --joya-z-modal: 60;
+  --joya-z-toast: 80;
+}
