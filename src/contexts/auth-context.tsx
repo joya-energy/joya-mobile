@@ -1,5 +1,3 @@
-"use client";
-
 import React, {
   createContext,
   useContext,
@@ -7,7 +5,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "expo-router";
 import type { User } from "@/types/auth";
 import { authApi } from "@/lib/auth/api";
 import { shouldRedirectToLogin } from "@/lib/auth/public-routes";
@@ -16,6 +14,8 @@ import {
   connectSocketFromSession,
 } from "@/lib/auth/session";
 import { disconnectSocket } from "@/lib/socket/client";
+import { getAccessTokenSync } from "@/platform/secure-storage";
+import { AUTH_REDIRECT_LOGIN, appEvents } from "@/platform/events";
 
 export interface AuthContextType {
   user: User | null;
@@ -33,18 +33,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   const clearAuthLocalOnly = useCallback(() => {
     clearLegacyAuthStorage();
     setUser(null);
     disconnectSocket();
-    if (
-      typeof window !== "undefined" &&
-      shouldRedirectToLogin(window.location.pathname)
-    ) {
+    if (shouldRedirectToLogin(pathname || "/")) {
       router.push("/auth/login");
     }
-  }, [router]);
+  }, [router, pathname]);
 
   const login = useCallback(async (userData?: User) => {
     clearLegacyAuthStorage();
@@ -53,7 +51,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const { user: currentUser } = await authApi.getCurrentUser();
     setUser(currentUser);
-    // Socket is best-effort — never fail the login session on socket errors.
     try {
       await connectSocketFromSession();
     } catch (err) {
@@ -85,6 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const checkAuth = async () => {
       try {
+        if (!getAccessTokenSync()) {
+          setUser(null);
+          return;
+        }
         await refreshUser();
       } catch {
         disconnectSocket();
@@ -98,13 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   useEffect(() => {
-    const onAuthRedirect = () => {
+    return appEvents.on(AUTH_REDIRECT_LOGIN, () => {
       clearAuthLocalOnly();
-    };
-    window.addEventListener("auth:redirect-login", onAuthRedirect);
-    return () => {
-      window.removeEventListener("auth:redirect-login", onAuthRedirect);
-    };
+    });
   }, [clearAuthLocalOnly]);
 
   return (

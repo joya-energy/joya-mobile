@@ -1,21 +1,14 @@
-import * as React from "react";
+import { Text, type TextProps } from "react-native";
 import { cn } from "@/lib/utils";
 
-export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {}
-
-/** Landing `.f > .lab`: 13px, semibold, navy. */
-const Label = React.forwardRef<HTMLLabelElement, LabelProps>(({ className, ...props }, ref) => {
+export function Label({
+  className,
+  ...props
+}: TextProps & { className?: string }) {
   return (
-    <label
-      ref={ref}
-      className={cn(
-        "text-[13px] font-semibold leading-none text-navy peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
-        className,
-      )}
+    <Text
+      className={cn("mb-1.5 text-sm font-medium text-navy", className)}
       {...props}
     />
   );
-});
-Label.displayName = "Label";
-
-export { Label };
+}

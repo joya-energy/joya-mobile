@@ -1,26 +1,30 @@
-import { Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Link } from "expo-router";
+import { LoginForm } from "@/components/auth/login-form";
+import { Text } from "react-native";
 
-/**
- * Placeholder route — login-form.tsx will be adjusted from the copied web
- * component (DOM → RN) in the next pass.
- */
 export default function LoginScreen() {
   return (
-    <SafeAreaView className="flex-1 bg-cream px-6">
-      <View className="flex-1 justify-center">
-        <Text className="font-display text-2xl font-bold text-navy">
-          Connexion
-        </Text>
-        <Text className="mt-2 text-ink-muted">
-          Auth API + SecureStore Bearer is wired. UI form port from
-          src/components/auth/login-form.tsx is next.
-        </Text>
-        <Link href="/" className="mt-6 text-coral">
-          Retour
-        </Link>
-      </View>
+    <SafeAreaView className="flex-1 bg-cream">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
+          keyboardShouldPersistTaps="handled"
+          className="px-5"
+        >
+          <View className="mb-6 items-center pt-6">
+            <Text className="font-display text-3xl font-bold text-navy">
+              JOYA
+            </Text>
+            <Text className="mt-1 text-sm text-ink-muted">Énergie solaire</Text>
+          </View>
+          <LoginForm />
+          <View className="h-10" />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

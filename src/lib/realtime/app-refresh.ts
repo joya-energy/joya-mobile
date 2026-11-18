@@ -1,3 +1,5 @@
+import { appEvents } from "@/platform/events";
+
 export type AppRefreshScope =
   | "notifications"
   | "follow_up"
@@ -17,25 +19,21 @@ export function dispatchAppRefresh(
   scopes: AppRefreshScope[],
   meta?: { notificationType?: string },
 ): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent<AppRefreshDetail>(APP_REFRESH_EVENT, {
-      detail: { scopes, notificationType: meta?.notificationType },
-    }),
-  );
+  appEvents.emit(APP_REFRESH_EVENT, {
+    scopes,
+    notificationType: meta?.notificationType,
+  } satisfies AppRefreshDetail);
 }
 
 export function subscribeAppRefresh(
   scope: AppRefreshScope,
   handler: (detail: AppRefreshDetail) => void,
 ): () => void {
-  const listener = (event: Event) => {
-    const detail = (event as CustomEvent<AppRefreshDetail>).detail;
-    if (!detail?.scopes?.length) return;
-    if (detail.scopes.includes("all") || detail.scopes.includes(scope)) {
-      handler(detail);
+  return appEvents.on(APP_REFRESH_EVENT, (detail) => {
+    const payload = detail as AppRefreshDetail | undefined;
+    if (!payload?.scopes?.length) return;
+    if (payload.scopes.includes("all") || payload.scopes.includes(scope)) {
+      handler(payload);
     }
-  };
-  window.addEventListener(APP_REFRESH_EVENT, listener);
-  return () => window.removeEventListener(APP_REFRESH_EVENT, listener);
+  });
 }

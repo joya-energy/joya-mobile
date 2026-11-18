@@ -1,5 +1,3 @@
-"use client";
-
 import {
   createContext,
   useCallback,
@@ -8,16 +6,23 @@ import {
   useMemo,
   useState,
 } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
 import { journeyApi } from "@/lib/journey/api";
-import { getRoleAwareHomePath, isInstaller, isTechnicalReferent } from "@/lib/auth/roles";
+import {
+  getRoleAwareHomePath,
+  isInstaller,
+  isTechnicalReferent,
+} from "@/lib/auth/roles";
 import { subscribeAppRefresh } from "@/lib/realtime/app-refresh";
 import {
   isPathAllowedForPhase,
   showAppShell,
 } from "@/lib/journey/routing";
-import type { ClientJourneyPhase, ClientJourneyResponse } from "@/lib/journey/types";
+import type {
+  ClientJourneyPhase,
+  ClientJourneyResponse,
+} from "@/lib/journey/types";
 
 type ClientJourneyContextType = {
   journey: ClientJourneyResponse | null;
@@ -27,9 +32,9 @@ type ClientJourneyContextType = {
   showShell: boolean;
 };
 
-const ClientJourneyContext = createContext<ClientJourneyContextType | undefined>(
-  undefined,
-);
+const ClientJourneyContext = createContext<
+  ClientJourneyContextType | undefined
+>(undefined);
 
 export function ClientJourneyProvider({
   children,
@@ -80,12 +85,12 @@ export function ClientJourneyProvider({
     if (isLoading || !journey || !pathname?.startsWith("/client")) return;
 
     if (isInstaller(role)) {
-      router.replace("/installateur");
+      // Installer portal out of v1 — keep them in client for now
       return;
     }
 
     if (!isPathAllowedForPhase(pathname, journey.phase, role)) {
-      router.replace(getRoleAwareHomePath(role, journey.phase));
+      router.replace(getRoleAwareHomePath(role, journey.phase) as never);
     }
   }, [isLoading, journey, pathname, role, router]);
 
@@ -110,7 +115,9 @@ export function ClientJourneyProvider({
 export function useClientJourney() {
   const ctx = useContext(ClientJourneyContext);
   if (!ctx) {
-    throw new Error("useClientJourney must be used within ClientJourneyProvider");
+    throw new Error(
+      "useClientJourney must be used within ClientJourneyProvider",
+    );
   }
   return ctx;
 }

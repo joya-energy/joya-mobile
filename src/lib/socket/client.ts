@@ -1,7 +1,7 @@
 import { io, Socket } from "socket.io-client";
+import { resolveSocketUrl } from "@/lib/api-base-url";
 
-const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:8006";
+const SOCKET_URL = resolveSocketUrl();
 
 type JsonPayload = Record<string, unknown> | null;
 type SocketEventPayload = Record<string, unknown> | null | undefined;
@@ -64,9 +64,8 @@ export const connectSocket = (token: string): Socket => {
   }
 
   socket = io(SOCKET_URL, {
-    transports: ["websocket", "polling"],
+    transports: ["websocket"],
     autoConnect: true,
-    withCredentials: true,
     auth: { token },
   });
 
@@ -76,18 +75,12 @@ export const connectSocket = (token: string): Socket => {
 };
 
 export const disconnectSocket = (): void => {
-  if (!socket) {
-    return;
-  }
-
+  if (!socket) return;
   socket.disconnect();
 };
 
 export const updateSocketAuth = (token: string): void => {
-  if (!socket) {
-    return;
-  }
-
+  if (!socket) return;
   socket.auth = { token };
   socket.emit("auth:login", { token }, (response: SocketAuthResponse) => {
     if (!response?.success) {
@@ -103,20 +96,13 @@ export const onSocketEvent = (
   event: string,
   listener: SocketEventListener,
 ): (() => void) => {
-  if (!socket) {
-    const bucket = pendingEventListeners.get(event) ?? new Set<SocketEventListener>();
-    bucket.add(listener);
-    pendingEventListeners.set(event, bucket);
-    return () => {
-      bucket.delete(listener);
-      if (bucket.size === 0) {
-        pendingEventListeners.delete(event);
-      }
-    };
+  if (!pendingEventListeners.has(event)) {
+    pendingEventListeners.set(event, new Set());
   }
-
-  socket.on(event, listener);
+  pendingEventListeners.get(event)!.add(listener);
+  socket?.on(event, listener);
   return () => {
+    pendingEventListeners.get(event)?.delete(listener);
     socket?.off(event, listener);
   };
 };
@@ -125,10 +111,6 @@ export const onAnySocketEvent = (
   listener: (eventName: string, payload: SocketEventPayload) => void,
 ): (() => void) => {
   anySocketListeners.add(listener);
-  if (socket) {
-    attachAnySocketBridge(socket);
-  }
-
   return () => {
     anySocketListeners.delete(listener);
   };
