@@ -9,10 +9,7 @@ const shims = {
   "next/link": path.resolve(__dirname, "src/shims/next-link.tsx"),
   "next/image": path.resolve(__dirname, "src/shims/next-image.tsx"),
   sonner: path.resolve(__dirname, "src/shims/sonner.ts"),
-  "lucide-react": path.resolve(
-    __dirname,
-    "node_modules/lucide-react-native",
-  ),
+  "lucide-react": path.resolve(__dirname, "src/shims/lucide-react.ts"),
 };
 
 const previousResolveRequest = config.resolver.resolveRequest;

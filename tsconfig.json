@@ -10,7 +10,7 @@
       "next/link": ["./src/shims/next-link.tsx"],
       "next/image": ["./src/shims/next-image.tsx"],
       "sonner": ["./src/shims/sonner.ts"],
-      "lucide-react": ["./node_modules/lucide-react-native"]
+      "lucide-react": ["./src/shims/lucide-react.ts"]
     }
   },
   "include": [
