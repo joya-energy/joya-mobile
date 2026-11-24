@@ -40,8 +40,18 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+  // Native stacks may auto-attach Set-Cookie from login; cookies + bad Origin
+  // trip CSRF on core-api. Mobile auth is Bearer-only — never send Cookie.
+  if (config.headers) {
+    delete (config.headers as Record<string, unknown>).Cookie;
+    delete (config.headers as Record<string, unknown>).cookie;
+    config.headers.set?.("Cookie", "");
+  }
   return config;
 });
+
+apiClient.defaults.withCredentials = false;
+refreshAxios.defaults.withCredentials = false;
 
 const AUTH_ENDPOINTS_401_OK = [
   "/auth/login",

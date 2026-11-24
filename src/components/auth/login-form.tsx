@@ -82,13 +82,17 @@ export function LoginForm() {
     setError(null);
 
     try {
+      // Only clear a prior Bearer session — avoid noisy 401/403 on cold login.
       try {
-        await Promise.race([
-          authApi.logout(),
-          new Promise((_, reject) => {
-            setTimeout(() => reject(new Error("logout-timeout")), 2500);
-          }),
-        ]);
+        const { getAccessTokenSync } = await import("@/platform/secure-storage");
+        if (getAccessTokenSync()) {
+          await Promise.race([
+            authApi.logout(),
+            new Promise((_, reject) => {
+              setTimeout(() => reject(new Error("logout-timeout")), 2500);
+            }),
+          ]);
+        }
       } catch {
         // ignore
       }
