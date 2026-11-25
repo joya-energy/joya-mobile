@@ -1,58 +1,71 @@
 import type { ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react-native";
+import { Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { cn } from "@/lib/utils";
 import { CountUp } from "./count-up";
+import { joyaColors } from "@/theme/colors";
 
-export type JoyaTone = "coral" | "navy" | "blue" | "success" | "warning" | "danger" | "neutral" | "sun";
+export type JoyaTone =
+  | "coral"
+  | "navy"
+  | "blue"
+  | "success"
+  | "warning"
+  | "danger"
+  | "neutral"
+  | "sun";
 
 /** Icon chip colours per tone (soft background + strong foreground). */
 export const JOYA_TONE_CHIP: Record<JoyaTone, string> = {
-  coral: "bg-coral-soft text-coral",
-  navy: "bg-navy/[0.07] text-navy",
-  blue: "bg-blue-tint text-blue",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  danger: "bg-danger-soft text-danger",
-  neutral: "bg-slate-100 text-slate-600",
-  sun: "bg-warning-soft text-sun",
+  coral: "bg-coral-soft",
+  navy: "bg-navy/10",
+  blue: "bg-blue-tint",
+  success: "bg-success-soft",
+  warning: "bg-warning-soft",
+  danger: "bg-danger-soft",
+  neutral: "bg-slate-100",
+  sun: "bg-warning-soft",
+};
+
+const JOYA_TONE_ICON: Record<JoyaTone, string> = {
+  coral: joyaColors.coral,
+  navy: joyaColors.navy,
+  blue: joyaColors.blue,
+  success: joyaColors.success,
+  warning: joyaColors.warning,
+  danger: joyaColors.danger,
+  neutral: "#475569",
+  sun: joyaColors.sun ?? joyaColors.warning,
 };
 
 type JoyaKpiCardProps = {
   label: ReactNode;
   value: ReactNode;
-  /** Unit rendered smaller next to the value (kWh, DT, %…). */
   unit?: ReactNode;
   icon?: LucideIcon;
   tone?: JoyaTone;
-  /** Override icon chip colours (background + foreground). */
   chipClassName?: string;
   footnote?: ReactNode;
-  /** Top-right slot: trend chip, badge… */
   badge?: ReactNode;
-  /**
-   * `default` white card · `hot` warm coral (report `.rc--hot`) ·
-   * `cream` nested tile · `tint` blue tint (report `.rc`) · `navy` dark highlight.
-   */
   variant?: "default" | "hot" | "cream" | "tint" | "navy";
   size?: "sm" | "md" | "lg";
   valueClassName?: string;
   className?: string;
-  /** 0–100 thin bar under the value (e.g. autoconsommation). */
   progress?: number | null;
 };
 
-const VARIANT_SURFACE: Record<NonNullable<JoyaKpiCardProps["variant"]>, string> = {
+const VARIANT_SURFACE: Record<
+  NonNullable<JoyaKpiCardProps["variant"]>,
+  string
+> = {
   default: "border-line/80 bg-white",
   hot: "border-transparent bg-coral-wash",
-  cream: "border-transparent bg-cream-2 shadow-none hover:translate-y-0 hover:shadow-none",
+  cream: "border-transparent bg-cream-2 shadow-none",
   tint: "border-blue/10 bg-blue-soft",
-  navy: "border-transparent text-white",
+  navy: "border-transparent",
 };
 
-/**
- * KPI card — compact, label first, big Archivo figure, optional footnote.
- * Values must be pre-formatted by the caller (no business logic here).
- */
 export function JoyaKpiCard({
   label,
   value,
@@ -69,141 +82,163 @@ export function JoyaKpiCard({
   progress,
 }: JoyaKpiCardProps) {
   const isNavy = variant === "navy";
-  const isHot = variant === "hot";
   const missing = value === "—";
+  const iconColor = isNavy ? joyaColors.coral : JOYA_TONE_ICON[tone];
+
   return (
-    <article
+    <View
       className={cn(
-        "group/kpi relative isolate flex min-w-0 flex-col overflow-hidden rounded-[20px] border shadow-joya-xs transition-[box-shadow,transform] duration-base ease-joya hover:-translate-y-0.5 hover:shadow-joya-md",
+        "relative isolate min-w-0 overflow-hidden rounded-[20px] border shadow-joya-xs",
         VARIANT_SURFACE[variant],
-        isNavy &&
-          "bg-[linear-gradient(160deg,#1a4468_0%,rgb(var(--joya-navy-rgb))_46%,rgb(var(--joya-navy-dark-rgb))_100%)]",
-        size === "sm" ? "gap-2 p-3.5" : size === "lg" ? "gap-3 p-5 sm:p-6" : "gap-2.5 p-4 sm:p-5",
+        size === "sm" ? "gap-2 p-3.5" : size === "lg" ? "gap-3 p-5" : "gap-2.5 p-4",
         className,
       )}
     >
       {isNavy ? (
-        <span
-          className="pointer-events-none absolute -bottom-10 -right-6 h-36 w-36 rounded-full bg-[rgb(148_92_168/0.42)] blur-2xl"
-          aria-hidden
-        />
-      ) : null}
-      {isHot ? (
-        <span
-          className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-coral/15 blur-2xl"
-          aria-hidden
+        <LinearGradient
+          colors={["#1a4468", joyaColors.navy, joyaColors.navyDark ?? "#0f2a44"]}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
         />
       ) : null}
 
-      <div className="relative flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <View className="relative flex-row items-start justify-between gap-2">
+        <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
           {Icon ? (
-            <span
+            <View
               className={cn(
-                "grid shrink-0 place-items-center rounded-[14px] transition-transform duration-base ease-joya group-hover/kpi:scale-110",
-                size === "sm" ? "h-8 w-8" : "h-9 w-9 sm:h-10 sm:w-10",
-                chipClassName ?? (isNavy ? "bg-white/12 text-coral" : JOYA_TONE_CHIP[tone]),
+                "items-center justify-center rounded-[14px]",
+                size === "sm" ? "h-8 w-8" : "h-10 w-10",
+                chipClassName ?? (isNavy ? "bg-white/12" : JOYA_TONE_CHIP[tone]),
               )}
-              aria-hidden
             >
-              <Icon className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4 sm:h-[18px] sm:w-[18px]"} />
-            </span>
+              <Icon size={size === "sm" ? 14 : 18} color={iconColor} />
+            </View>
           ) : null}
-          <p
+          <Text
             className={cn(
-              "min-w-0 text-[12.5px] font-medium leading-snug sm:text-[13px]",
+              "min-w-0 flex-1 text-[12.5px] font-medium leading-snug",
               isNavy ? "text-white/70" : "text-ink-muted",
             )}
+            numberOfLines={2}
           >
             {label}
-          </p>
-        </div>
-        {badge ? <div className="shrink-0">{badge}</div> : null}
-      </div>
+          </Text>
+        </View>
+        {badge ? <View className="shrink-0">{badge}</View> : null}
+      </View>
 
-      <p
-        className={cn(
-          "joya-kpi-value relative flex flex-wrap items-baseline gap-x-1.5 break-words",
-          size === "lg" ? "text-kpi-lg" : size === "sm" ? "text-xl" : "text-kpi",
-          isNavy && "text-white",
-          missing && "font-sans text-[1.35rem] font-semibold tracking-normal text-ink-faint",
-          missing && isNavy && "text-white/45",
-          valueClassName,
-        )}
-      >
-        <span className="min-w-0">
-          {typeof value === "string" && !missing ? <CountUp text={value} /> : value}
-        </span>
-        {unit && !missing ? (
-          <span
+      <View className="relative flex-row flex-wrap items-baseline gap-x-1.5">
+        {typeof value === "string" && !missing ? (
+          <CountUp
+            text={value}
             className={cn(
-              "font-sans text-[13px] font-semibold tracking-normal",
+              "font-display font-extrabold tracking-tight",
+              size === "lg" ? "text-3xl" : size === "sm" ? "text-xl" : "text-2xl",
+              isNavy && "text-white",
+              valueClassName,
+            )}
+          />
+        ) : (
+          <Text
+            className={cn(
+              "font-display font-extrabold tracking-tight",
+              size === "lg" ? "text-3xl" : size === "sm" ? "text-xl" : "text-2xl",
+              isNavy && "text-white",
+              missing && "font-semibold text-ink-faint",
+              missing && isNavy && "text-white/45",
+              valueClassName,
+            )}
+          >
+            {value}
+          </Text>
+        )}
+        {unit && !missing ? (
+          <Text
+            className={cn(
+              "text-[13px] font-semibold",
               isNavy ? "text-white/55" : "text-ink-faint",
             )}
           >
             {unit}
-          </span>
+          </Text>
         ) : null}
-      </p>
+      </View>
 
       {progress != null && Number.isFinite(progress) ? (
-        <div
+        <View
           className={cn(
             "relative mt-1.5 h-1 overflow-hidden rounded-full",
             isNavy ? "bg-white/15" : "bg-slate-200",
           )}
         >
-          <div
+          <View
             className="h-full min-w-3 rounded-full bg-coral"
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
           />
-        </div>
+        </View>
       ) : null}
 
       {footnote ? (
-        <p
+        <Text
           className={cn(
             "relative mt-auto text-[12.5px] leading-snug",
             isNavy ? "text-white/55" : "text-ink-faint",
           )}
         >
           {footnote}
-        </p>
+        </Text>
       ) : null}
-    </article>
+    </View>
   );
 }
 
 type JoyaTrendProps = {
   value: number | null | undefined;
-  /** Already formatted label; defaults to signed percent. */
   label?: string;
-  /** When lower is better (consumption), invert colours. */
   invert?: boolean;
   className?: string;
 };
 
-/** Small trend chip (+4,2 %). */
-export function JoyaTrend({ value, label, invert = false, className }: JoyaTrendProps) {
+export function JoyaTrend({
+  value,
+  label,
+  invert = false,
+  className,
+}: JoyaTrendProps) {
   if (value == null || !Number.isFinite(value)) return null;
   const positive = invert ? value < 0 : value > 0;
   const flat = value === 0;
   const text =
     label ??
-    `${value > 0 ? "+" : ""}${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
+    `${value > 0 ? "+" : ""}${value.toLocaleString("fr-FR", {
+      maximumFractionDigits: 1,
+    })} %`;
   return (
-    <span
+    <View
       className={cn(
-        "inline-flex h-6 items-center rounded-pill px-2 font-data text-[11.5px] font-medium tabular-nums",
+        "h-6 items-center justify-center rounded-full px-2",
         flat
-          ? "bg-slate-100 text-slate-600"
+          ? "bg-slate-100"
           : positive
-            ? "bg-success-soft text-success-strong"
-            : "bg-danger-soft text-danger-strong",
+            ? "bg-success-soft"
+            : "bg-danger-soft",
         className,
       )}
     >
-      {text}
-    </span>
+      <Text
+        className={cn(
+          "font-data text-[11.5px] font-medium tabular-nums",
+          flat
+            ? "text-slate-600"
+            : positive
+              ? "text-success-strong"
+              : "text-danger-strong",
+        )}
+      >
+        {text}
+      </Text>
+    </View>
   );
 }

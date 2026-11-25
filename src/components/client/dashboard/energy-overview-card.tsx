@@ -1,14 +1,5 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useOptionalDeviceScope } from "@/contexts/device-scope-context";
 import { clientDashboardApi } from "@/lib/dashboard/api";
 import { consumptionApi } from "@/lib/consumption/api";
@@ -168,43 +159,55 @@ export function EnergyOverviewCard({ energyByYear, companyId }: EnergyOverviewCa
   }, [buckets]);
 
   return (
-    <section className="flex min-w-0 flex-col rounded-2xl border border-line bg-white p-5 shadow-joya-sm sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display text-[1.35rem] font-bold tracking-[-0.025em] text-navy-dark">
+    <View className="min-w-0 flex-col rounded-2xl border border-line bg-white p-5">
+      <View className="gap-3">
+        <View className="min-w-0">
+          <Text className="font-display text-[22px] font-bold tracking-[-0.5px] text-navy-dark">
             Aperçu énergétique
-          </h2>
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13.5px] text-ink-muted">
-            <span className="inline-flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CONSUMED }} aria-hidden />
-              Énergie consommée (kWh)
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PRODUCED }} aria-hidden />
-              Énergie solaire produite (kWh)
-            </span>
-          </div>
-        </div>
-        <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-          <SelectTrigger className="h-10 w-[160px] rounded-xl text-[14px]" aria-label="Période">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end">
-            {PERIODS.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </Text>
+          <View className="mt-2.5 flex-row flex-wrap items-center gap-x-5 gap-y-1.5">
+            <View className="flex-row items-center gap-2">
+              <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CONSUMED }} />
+              <Text className="text-[13.5px] text-ink-muted">Énergie consommée (kWh)</Text>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PRODUCED }} />
+              <Text className="text-[13.5px] text-ink-muted">Énergie solaire produite (kWh)</Text>
+            </View>
+          </View>
+        </View>
 
-      <div className="relative mt-4 h-64 sm:h-72">
+        <View className="flex-row flex-wrap gap-2" accessibilityRole="tablist" accessibilityLabel="Période">
+          {PERIODS.map((p) => {
+            const active = p.value === period;
+            return (
+              <Pressable
+                key={p.value}
+                onPress={() => setPeriod(p.value)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                hitSlop={4}
+                className={
+                  active
+                    ? "h-9 items-center justify-center rounded-full border border-navy bg-navy px-4"
+                    : "h-9 items-center justify-center rounded-full border border-line bg-white px-4 active:bg-slate-100"
+                }
+              >
+                <Text className={active ? "text-[13.5px] font-semibold text-white" : "text-[13.5px] font-medium text-navy"}>
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View className="relative mt-4 h-64">
         {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-ink-muted">
-            <Loader2 className="h-4 w-4 animate-spin text-coral" aria-hidden />
-            Chargement…
-          </div>
+          <View className="absolute inset-0 flex-row items-center justify-center gap-2">
+            <ActivityIndicator size="small" color={JOYA_CHART.coral} />
+            <Text className="text-sm text-ink-muted">Chargement…</Text>
+          </View>
         ) : (
           <JoyaGroupedBarChart
             key={period}
@@ -217,44 +220,53 @@ export function EnergyOverviewCard({ energyByYear, companyId }: EnergyOverviewCa
             ]}
             renderTooltip={(i) => {
               const b = buckets[i];
+              if (!b) return null;
               const cover = b.consumed > 0 ? Math.min(100, (b.produced / b.consumed) * 100) : null;
               return (
-                <div className="min-w-[13rem]">
+                <View className="min-w-[208px]">
                   <TooltipTitle>{b.title}</TooltipTitle>
-                  <div className="mt-2 space-y-1.5 text-sm">
-                    <p className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CONSUMED }} aria-hidden />
-                      <span className="text-ink-muted">Consommée</span>
-                      <span className="ml-auto font-display font-bold tabular-nums text-navy">{formatValue(b.consumed, "kWh", 0)}</span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PRODUCED }} aria-hidden />
-                      <span className="text-ink-muted">Produite</span>
-                      <span className="ml-auto font-display font-bold tabular-nums text-navy">{formatValue(b.produced, "kWh", 0)}</span>
-                    </p>
-                  </div>
+                  <View className="mt-2 gap-1.5">
+                    <View className="flex-row items-center gap-2">
+                      <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CONSUMED }} />
+                      <Text className="flex-1 text-sm text-ink-muted">Consommée</Text>
+                      <Text className="font-display text-sm font-bold text-navy" style={{ fontVariant: ["tabular-nums"] }}>
+                        {formatValue(b.consumed, "kWh", 0)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center gap-2">
+                      <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PRODUCED }} />
+                      <Text className="flex-1 text-sm text-ink-muted">Produite</Text>
+                      <Text className="font-display text-sm font-bold text-navy" style={{ fontVariant: ["tabular-nums"] }}>
+                        {formatValue(b.produced, "kWh", 0)}
+                      </Text>
+                    </View>
+                  </View>
                   {cover != null ? (
-                    <p className="mt-2 border-t border-line pt-2 text-[12.5px] font-semibold text-success-strong">
-                      {cover.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} % couvert par le solaire
-                    </p>
+                    <View className="mt-2 border-t border-line pt-2">
+                      <Text className="text-[12.5px] font-semibold text-success-strong">
+                        {cover.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} % couvert par le solaire
+                      </Text>
+                    </View>
                   ) : null}
-                </div>
+                </View>
               );
             }}
           />
         )}
-      </div>
+      </View>
 
       {!loading && totals.coverage != null ? (
-        <p className="mt-3 border-t border-line pt-3 text-[13px] text-ink-muted">
-          Sur la période, le solaire a couvert{" "}
-          <b className="font-display text-navy">
-            {totals.coverage.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %
-          </b>{" "}
-          de votre consommation ({formatValue(totals.produced, "kWh", 0)} produits pour{" "}
-          {formatValue(totals.consumed, "kWh", 0)} consommés).
-        </p>
+        <View className="mt-3 border-t border-line pt-3">
+          <Text className="text-[13px] leading-5 text-ink-muted">
+            Sur la période, le solaire a couvert{" "}
+            <Text className="font-display font-bold text-navy">
+              {totals.coverage.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} %
+            </Text>{" "}
+            de votre consommation ({formatValue(totals.produced, "kWh", 0)} produits pour{" "}
+            {formatValue(totals.consumed, "kWh", 0)} consommés).
+          </Text>
+        </View>
       ) : null}
-    </section>
+    </View>
   );
 }

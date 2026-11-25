@@ -2,6 +2,7 @@ import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "@/contexts/auth-context";
 import { ClientJourneyProvider } from "@/contexts/client-journey-context";
+import { DeviceScopeProvider } from "@/contexts/device-scope-context";
 import { ClientMobileNav } from "@/components/client/client-mobile-nav";
 import { joyaColors } from "@/theme/colors";
 
@@ -29,15 +30,17 @@ export default function ClientLayout() {
 
   return (
     <ClientJourneyProvider>
-      <View style={{ flex: 1, backgroundColor: joyaColors.cream }}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: joyaColors.cream },
-          }}
-        />
-        <ClientMobileNav />
-      </View>
+      <DeviceScopeProvider>
+        <View style={{ flex: 1, backgroundColor: joyaColors.cream }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: joyaColors.cream },
+            }}
+          />
+          <ClientMobileNav />
+        </View>
+      </DeviceScopeProvider>
     </ClientJourneyProvider>
   );
 }

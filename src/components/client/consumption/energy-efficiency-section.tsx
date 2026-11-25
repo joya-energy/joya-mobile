@@ -1,9 +1,17 @@
-"use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Pressable, Text, View } from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  RadialGradient,
+  Rect,
+  Stop,
+} from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Activity,
   Building2,
+  Check,
   ChevronDown,
   Clock,
   Info,
@@ -14,20 +22,16 @@ import {
   Sparkles,
   Sun,
   Zap,
-} from "lucide-react";
+} from "lucide-react-native";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { EdgeMetricPoint } from "@/lib/consumption/api";
-import type { SeriesRow } from "@/components/client/consumption/edge-consumption-charts";
+import {
+  TABULAR,
+  type SeriesRow,
+} from "@/components/client/consumption/edge-consumption-charts";
 import {
   EFFICIENCY_SECTORS,
   WEEKDAYS,
@@ -50,6 +54,10 @@ import {
   TooltipTitle,
   formatValue,
 } from "@/components/client/dashboard/chart-kit";
+import { PillSelect } from "@/components/client/onboarding-info/pill-select";
+import { joyaColors } from "@/theme/colors";
+
+const joyaNeutralIcon = "#94a3b8";
 
 function weekSummary(week: WeeklySchedule): string {
   const openDays = WEEKDAYS.filter((wd) => week[wd.key]?.open);
@@ -78,35 +86,52 @@ function weekHoursLabel(week: WeeklySchedule): string {
   return `${first.openTime}–${first.closeTime}`;
 }
 
+const DONUT_SIZE = 100;
+
 function OffShareDonut({ percent }: { percent: number | null }) {
-  const pct = percent != null && Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const pct =
+    percent != null && Number.isFinite(percent)
+      ? Math.min(100, Math.max(0, percent))
+      : 0;
   const r = 34;
   const c = 2 * Math.PI * r;
   const dash = (pct / 100) * c;
   return (
-    <div className="relative h-[6.25rem] w-[6.25rem] shrink-0">
-      <svg viewBox="0 0 88 88" className="h-full w-full -rotate-90" aria-hidden>
-        <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="9" />
-        <circle
-          cx="44"
-          cy="44"
+    <View style={{ width: DONUT_SIZE, height: DONUT_SIZE }} className="shrink-0">
+      <Svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox="0 0 88 88">
+        <Circle
+          cx={44}
+          cy={44}
+          r={r}
+          fill="none"
+          stroke="rgba(255,255,255,0.18)"
+          strokeWidth={9}
+        />
+        <Circle
+          cx={44}
+          cy={44}
           r={r}
           fill="none"
           stroke={JOYA_CHART.coral}
-          strokeWidth="9"
+          strokeWidth={9}
           strokeLinecap="round"
-          strokeDasharray={`${dash} ${c}`}
+          strokeDasharray={[dash, c]}
+          rotation={-90}
+          origin="44, 44"
         />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-display text-[1.15rem] font-bold leading-none tabular-nums text-white">
+      </Svg>
+      <View className="absolute inset-0 items-center justify-center">
+        <Text
+          className="font-display text-[18px] font-bold leading-none text-white"
+          style={TABULAR}
+        >
           {percent != null ? `${percent}\u00a0%` : "—"}
-        </span>
-        <span className="mt-1 text-[9px] font-medium leading-tight text-white/55">
+        </Text>
+        <Text className="mt-1 text-[9px] font-medium leading-tight text-white/55">
           hors fonct.
-        </span>
-      </div>
-    </div>
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -139,6 +164,29 @@ function alertBadge(alert: EfficiencyAlert): { top: string; bottom: string } {
   return { top: "!", bottom: "ALERTE" };
 }
 
+function SavingsBlock({
+  value,
+  align = "right",
+}: {
+  value: number;
+  align?: "left" | "right";
+}) {
+  return (
+    <View className={align === "right" ? "items-end" : "items-start"}>
+      <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+        Économie / mois
+      </Text>
+      <Text
+        className="mt-0.5 font-display text-[22px] font-bold leading-none text-coral"
+        style={TABULAR}
+      >
+        {formatDt(value)}
+        <Text className="text-[13px] font-semibold"> DT</Text>
+      </Text>
+    </View>
+  );
+}
+
 function FeaturedAlertCard({
   alert,
   open,
@@ -149,121 +197,214 @@ function FeaturedAlertCard({
   onToggle: () => void;
 }) {
   const badge = alertBadge(alert);
-  const panelId = `${alert.id}-panel`;
 
   return (
-    <li className="overflow-hidden rounded-[22px] border border-line bg-white shadow-joya-sm">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className="flex w-full items-start gap-3 px-4 py-4 text-left sm:gap-4 sm:px-5"
+    <View className="overflow-hidden rounded-[22px] border border-line bg-white shadow-joya-sm">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        className="flex-row items-start gap-3 px-4 py-4"
       >
-        <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-[16px] bg-coral-wash">
-          <span className="font-display text-[1.05rem] font-bold leading-none tabular-nums text-coral">
+        <View className="h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-coral-wash">
+          <Text
+            numberOfLines={1}
+            className="font-display text-[16px] font-bold leading-none text-coral"
+            style={TABULAR}
+          >
             {badge.top}
-          </span>
-          <span className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-coral/75">
+          </Text>
+          <Text className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-coral/75">
             {badge.bottom}
-          </span>
-        </span>
-        <div className="min-w-0 flex-1">
-          <h4 className="font-display text-[1.05rem] font-bold leading-snug tracking-tight text-navy sm:text-lg">
+          </Text>
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className="font-display text-[16px] font-bold leading-snug tracking-tight text-navy">
             {alert.title}
-          </h4>
-          <p className="mt-0.5 text-[13px] text-ink-muted">{alert.hook}</p>
+          </Text>
+          <Text className="mt-0.5 text-[13px] text-ink-muted">{alert.hook}</Text>
           {alert.measuredLabel || alert.thresholdLabel ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <View className="mt-2 flex-row flex-wrap gap-1.5">
               {alert.measuredLabel ? (
-                <span className="rounded-full bg-coral-wash px-2.5 py-0.5 text-[12px] font-semibold tabular-nums text-coral">
-                  {alert.measuredLabel}
-                </span>
+                <View className="rounded-full bg-coral-wash px-2.5 py-0.5">
+                  <Text
+                    className="text-[12px] font-semibold text-coral"
+                    style={TABULAR}
+                  >
+                    {alert.measuredLabel}
+                  </Text>
+                </View>
               ) : null}
               {alert.thresholdLabel ? (
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[12px] font-medium text-navy/65">
-                  {alert.thresholdLabel}
-                </span>
+                <View className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                  <Text className="text-[12px] font-medium text-navy/65">
+                    {alert.thresholdLabel}
+                  </Text>
+                </View>
               ) : null}
-            </div>
+            </View>
           ) : null}
-        </div>
-        <div className="flex shrink-0 items-start gap-3">
           {alert.savingsDtMonth != null ? (
-            <div className="hidden text-right xs:block">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                Économie / mois
-              </p>
-              <p className="mt-0.5 font-display text-[1.35rem] font-bold leading-none tabular-nums text-coral">
-                {formatDt(alert.savingsDtMonth)}
-                <span className="ml-1 align-middle font-sans text-[13px] font-semibold">
-                  DT
-                </span>
-              </p>
-            </div>
+            <View className="mt-2.5 xs:hidden">
+              <SavingsBlock value={alert.savingsDtMonth} align="left" />
+            </View>
           ) : null}
-          <span className="mt-1 grid h-8 w-8 place-items-center rounded-full text-ink-muted">
-            <ChevronDown
-              className={open ? "h-5 w-5 rotate-180 transition-transform" : "h-5 w-5 transition-transform"}
-              aria-hidden
-            />
-          </span>
-        </div>
-      </button>
+        </View>
+        <View className="shrink-0 flex-row items-start gap-3">
+          {alert.savingsDtMonth != null ? (
+            <View className="hidden xs:flex">
+              <SavingsBlock value={alert.savingsDtMonth} />
+            </View>
+          ) : null}
+          <View
+            className="mt-1 h-8 w-8 items-center justify-center rounded-full"
+            style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}
+          >
+            <ChevronDown size={20} color="rgba(23,59,94,0.66)" />
+          </View>
+        </View>
+      </Pressable>
 
       {open ? (
-        <div id={panelId} className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            <div className="rounded-[16px] bg-cream-2/90 px-4 py-3.5">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-navy">
-                <Sparkles className="h-3.5 w-3.5 text-coral" aria-hidden />
-                Quand l&apos;alerte se déclenche
-              </p>
-              <p className="text-[13.5px] leading-relaxed text-ink-muted">
+        <View className="gap-3 px-4 pb-4">
+          <View className="gap-2.5">
+            <View className="rounded-[16px] bg-cream-2 px-4 py-3.5">
+              <View className="mb-1.5 flex-row items-center gap-1.5">
+                <Sparkles size={14} color={joyaColors.coral} />
+                <Text className="text-[12.5px] font-semibold text-navy">
+                  Quand l&apos;alerte se déclenche
+                </Text>
+              </View>
+              <Text className="text-[13.5px] leading-relaxed text-ink-muted">
                 {alert.whenTrigger}
-              </p>
-            </div>
-            <div className="rounded-[16px] bg-cream-2/90 px-4 py-3.5">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-navy">
-                <Info className="h-3.5 w-3.5 text-ink-muted" aria-hidden />
-                Ce que cela signifie
-              </p>
-              <p className="text-[13.5px] leading-relaxed text-ink-muted">
+              </Text>
+            </View>
+            <View className="rounded-[16px] bg-cream-2 px-4 py-3.5">
+              <View className="mb-1.5 flex-row items-center gap-1.5">
+                <Info size={14} color="rgba(23,59,94,0.66)" />
+                <Text className="text-[12.5px] font-semibold text-navy">
+                  Ce que cela signifie
+                </Text>
+              </View>
+              <Text className="text-[13.5px] leading-relaxed text-ink-muted">
                 {alert.meaning}
-              </p>
-            </div>
-          </div>
+              </Text>
+            </View>
+          </View>
 
           {alert.actions.length > 0 ? (
-            <div className="rounded-[16px] border border-coral/20 bg-coral-wash/40 px-4 py-3.5">
-              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-coral">
+            <View className="rounded-[16px] border border-coral/20 bg-coral-wash/60 px-4 py-3.5">
+              <Text className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-coral">
                 Nos recommandations
-              </p>
-              <ul className="flex flex-col gap-2">
+              </Text>
+              <View className="gap-2">
                 {alert.actions.map((item, index) => (
-                  <li
+                  <View
                     key={item}
-                    className="flex items-start gap-3 rounded-[12px] bg-white px-3 py-2.5 text-[13.5px] text-navy"
+                    className="flex-row items-start gap-3 rounded-[12px] bg-white px-3 py-2.5"
                   >
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-coral text-[11px] font-bold text-white">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5">{item}</span>
-                  </li>
+                    <View className="h-6 w-6 shrink-0 items-center justify-center rounded-full bg-coral">
+                      <Text className="text-[11px] font-bold text-white">
+                        {index + 1}
+                      </Text>
+                    </View>
+                    <Text className="min-w-0 flex-1 pt-0.5 text-[13.5px] text-navy">
+                      {item}
+                    </Text>
+                  </View>
                 ))}
-              </ul>
-            </div>
+              </View>
+            </View>
           ) : null}
 
           {alert.footer ? (
-            <p className="flex items-start gap-2 text-[12.5px] text-ink-muted">
-              <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-coral" aria-hidden />
-              {alert.footer}
-            </p>
+            <View className="flex-row items-start gap-2">
+              <View className="mt-0.5">
+                <Lightbulb size={14} color={joyaColors.coral} />
+              </View>
+              <Text className="min-w-0 flex-1 text-[12.5px] text-ink-muted">
+                {alert.footer}
+              </Text>
+            </View>
           ) : null}
-        </div>
+        </View>
       ) : null}
-    </li>
+    </View>
+  );
+}
+
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+function normalizeTime(text: string): string | null {
+  const m = TIME_RE.exec(text.trim());
+  if (!m) return null;
+  return `${m[1]!.padStart(2, "0")}:${m[2]}`;
+}
+
+/** `HH:MM` text field (native replacement for `<input type="time">`). */
+function TimeField({
+  value,
+  disabled,
+  onCommit,
+  label,
+}: {
+  value: string;
+  disabled?: boolean;
+  onCommit: (value: string) => void;
+  label: string;
+}) {
+  // `null` = not editing → mirror the committed value from the parent.
+  const [text, setText] = useState<string | null>(null);
+
+  return (
+    <Input
+      accessibilityLabel={label}
+      editable={!disabled}
+      value={text ?? value}
+      placeholder="08:00"
+      maxLength={5}
+      keyboardType="numbers-and-punctuation"
+      onChangeText={(next) => {
+        setText(next);
+        const normalized = normalizeTime(next);
+        if (normalized) onCommit(normalized);
+      }}
+      onBlur={() => setText(null)}
+      className={cn("h-9 w-[76px] px-2 text-center text-sm", disabled && "opacity-40")}
+    />
+  );
+}
+
+function FieldLabel({ children }: { children: string }) {
+  return <Text className="text-xs text-slate-600">{children}</Text>;
+}
+
+function InfoTile({
+  icon,
+  label,
+  children,
+  className,
+}: {
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <View
+      className={cn(
+        "min-h-[52px] min-w-[140px] justify-center rounded-2xl bg-slate-50 px-4 py-2",
+        className,
+      )}
+    >
+      <View className="flex-row items-center gap-1.5">
+        {icon}
+        <Text className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+          {label}
+        </Text>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -297,19 +438,8 @@ export function EnergyEfficiencySection({
   );
   const [editing, setEditing] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [kvaText, setKvaText] = useState("");
   const [openAlertId, setOpenAlertId] = useState<string | undefined>(undefined);
-  const scheduleRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!scheduleOpen) return;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!scheduleRef.current?.contains(event.target as Node)) {
-        setScheduleOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [scheduleOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,72 +533,96 @@ export function EnergyEfficiencySection({
       ? v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })
       : "—";
 
+  const totalSavings = snapshot.alerts.reduce(
+    (sum, alert) => sum + (alert.savingsDtMonth ?? 0),
+    0,
+  );
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative z-20 flex flex-wrap items-center gap-3 rounded-[28px] bg-white px-3 py-2 shadow-joya-sm sm:px-4">
-        <div className="flex shrink-0 items-center gap-2.5 px-2 py-2">
-          <span className="h-2 w-2 rounded-full bg-coral" aria-hidden />
-          <h3 className="text-sm font-semibold text-navy">Paramètres du site</h3>
-        </div>
+    <View className="gap-4">
+      {/* Paramètres du site */}
+      <View className="gap-3 rounded-[28px] bg-white px-3 py-3 shadow-joya-sm">
+        <View className="flex-row items-center gap-2.5 px-2 pt-1">
+          <View className="h-2 w-2 rounded-full bg-coral" />
+          <Text className="text-sm font-semibold text-navy">
+            Paramètres du site
+          </Text>
+        </View>
 
-        <div className="flex min-h-[3.25rem] min-w-[9.5rem] flex-col justify-center rounded-2xl bg-slate-50 px-4 py-2">
-          <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <Building2 className="h-3 w-3" aria-hidden />
-            Secteur
-          </p>
-          <p className="mt-0.5 truncate text-[13px] font-semibold text-navy">
-            {display.sector || "—"}
-          </p>
-        </div>
+        <View className="flex-row flex-wrap gap-2">
+          <InfoTile
+            label="Secteur"
+            icon={<Building2 size={12} color={joyaNeutralIcon} />}
+            className="flex-1"
+          >
+            <Text
+              numberOfLines={1}
+              className="mt-0.5 text-[13px] font-semibold text-navy"
+            >
+              {display.sector || "—"}
+            </Text>
+          </InfoTile>
 
-        <div className="flex min-h-[3.25rem] flex-col justify-center rounded-2xl bg-slate-50 px-4 py-2">
-          <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <Clock className="h-3 w-3" aria-hidden />
-            Fonctionnement
-          </p>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="flex items-center gap-0.5">
-              {WEEKDAYS.map((wd) => {
-                const open = Boolean(display.week[wd.key]?.open);
-                return (
-                  <span
-                    key={wd.key}
-                    className={
-                      open
-                        ? "flex h-5 w-5 items-center justify-center rounded-full bg-navy text-[10px] font-bold text-white"
-                        : "flex h-5 w-5 items-center justify-center text-[10px] font-semibold text-slate-300"
-                    }
-                  >
-                    {wd.short.charAt(0)}
-                  </span>
-                );
-              })}
-            </span>
-            <span className="text-[13px] font-semibold tabular-nums text-navy">
-              {weekHoursLabel(display.week)}
-            </span>
-          </div>
-        </div>
+          <InfoTile
+            label="Fonctionnement"
+            icon={<Clock size={12} color={joyaNeutralIcon} />}
+            className="flex-1"
+          >
+            <View className="mt-0.5 flex-row flex-wrap items-center gap-2">
+              <View className="flex-row items-center gap-0.5">
+                {WEEKDAYS.map((wd) => {
+                  const open = Boolean(display.week[wd.key]?.open);
+                  return (
+                    <View
+                      key={wd.key}
+                      className={cn(
+                        "h-5 w-5 items-center justify-center",
+                        open && "rounded-full bg-navy",
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          "text-[10px] font-bold",
+                          open ? "text-white" : "font-semibold text-slate-300",
+                        )}
+                      >
+                        {wd.short.charAt(0)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+              <Text
+                className="text-[13px] font-semibold text-navy"
+                style={TABULAR}
+              >
+                {weekHoursLabel(display.week)}
+              </Text>
+            </View>
+          </InfoTile>
 
-        <div className="flex min-h-[3.25rem] min-w-[9.5rem] flex-col justify-center rounded-2xl bg-slate-50 px-4 py-2">
-          <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <Zap className="h-3 w-3" aria-hidden />
-            Puissance souscrite
-          </p>
-          <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-navy">
-            {display.subscribedKva != null
-              ? `${display.subscribedKva.toLocaleString("fr-FR")} kVA`
-              : "—"}
-          </p>
-        </div>
+          <InfoTile
+            label="Puissance souscrite"
+            icon={<Zap size={12} color={joyaNeutralIcon} />}
+            className="flex-1"
+          >
+            <Text
+              className="mt-0.5 text-[13px] font-semibold text-navy"
+              style={TABULAR}
+            >
+              {display.subscribedKva != null
+                ? `${display.subscribedKva.toLocaleString("fr-FR")} kVA`
+                : "—"}
+            </Text>
+          </InfoTile>
+        </View>
 
         {editing ? (
-          <div className="ml-auto flex gap-2">
+          <View className="flex-row justify-end gap-2">
             <Button
-              type="button"
               variant="outline"
               className="h-11 rounded-2xl"
-              onClick={() => {
+              onPress={() => {
                 setDraft(applied);
                 setEditing(false);
                 setScheduleOpen(false);
@@ -476,297 +630,328 @@ export function EnergyEfficiencySection({
             >
               Annuler
             </Button>
-            <Button
-              type="button"
-              className="h-11 rounded-2xl bg-navy px-5 text-white hover:bg-navy-dark"
-              onClick={apply}
-            >
+            <Button className="h-11 rounded-2xl bg-navy px-5" onPress={apply}>
               Enregistrer
             </Button>
-          </div>
+          </View>
         ) : (
-          <Button
-            type="button"
-            className="ml-auto h-11 gap-1.5 rounded-2xl bg-navy px-5 text-white hover:bg-navy-dark"
-            onClick={() => {
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setKvaText(
+                draft.subscribedKva != null ? String(draft.subscribedKva) : "",
+              );
               setEditing(true);
               setScheduleOpen(true);
             }}
+            className="h-11 flex-row items-center justify-center gap-1.5 self-end rounded-2xl bg-navy px-5 active:bg-navy-dark"
           >
-            <Pencil className="h-3.5 w-3.5" aria-hidden />
-            Modifier
-          </Button>
+            <Pencil size={14} color="#fff" />
+            <Text className="text-sm font-semibold text-white">Modifier</Text>
+          </Pressable>
         )}
-      </div>
+      </View>
 
       {editing ? (
-      <Card className="relative z-20 overflow-visible border-line bg-white shadow-joya-sm">
-        <CardContent className="overflow-visible p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600">Secteur d&apos;activité</Label>
-              <Select
-                value={draft.sector || undefined}
-                onValueChange={(sector) => setDraft((p) => ({ ...p, sector }))}
-                disabled={!editing}
+        <Card className="gap-4 rounded-xl border-line bg-white p-4 shadow-joya-sm">
+          <View className="gap-1.5">
+            <FieldLabel>Secteur d&apos;activité</FieldLabel>
+            <PillSelect
+              label="Sélectionnez"
+              className="h-10 rounded-xl"
+              value={draft.sector}
+              options={EFFICIENCY_SECTORS.map((s) => ({ value: s, label: s }))}
+              onChange={(sector) => setDraft((p) => ({ ...p, sector }))}
+            />
+          </View>
+
+          <View className="gap-1.5">
+            <FieldLabel>Jours et horaires de fonctionnement</FieldLabel>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: scheduleOpen }}
+              onPress={() => setScheduleOpen((open) => !open)}
+              className="h-10 flex-row items-center justify-between gap-2 rounded-xl border border-line bg-white px-3"
+            >
+              <Text numberOfLines={1} className="min-w-0 flex-1 text-sm text-slate-800">
+                {weekSummary(draft.week)}
+              </Text>
+              <View
+                style={{ transform: [{ rotate: scheduleOpen ? "180deg" : "0deg" }] }}
               >
-                <SelectTrigger className="h-9 bg-white">
-                  <SelectValue placeholder="Sélectionnez" />
-                </SelectTrigger>
-                <SelectContent>
-                  {EFFICIENCY_SECTORS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="relative space-y-1.5 sm:col-span-2 lg:col-span-1" ref={scheduleRef}>
-              <Label className="text-xs text-slate-600">
-                Jours et horaires de fonctionnement
-              </Label>
-              <button
-                type="button"
-                className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => setScheduleOpen((open) => !open)}
-              >
-                <span className="truncate">{weekSummary(draft.week)}</span>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${
-                    scheduleOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-              {scheduleOpen ? (
-                <div className="absolute left-0 top-full z-50 mt-1 w-[min(calc(100vw-2rem),28rem)] rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                  <p className="mb-2 px-1 text-[11px] text-slate-400">
-                    Cochez les jours ouvrés et l&apos;horaire de chaque jour.
-                  </p>
-                  <div className="grid grid-cols-[auto_1fr_6.75rem_6.75rem] gap-x-2 px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                    <span />
-                    <span>Jour</span>
-                    <span>Début</span>
-                    <span>Fin</span>
-                  </div>
-                  {WEEKDAYS.map((wd) => {
-                    const day = draft.week[wd.key] ?? {
-                      open: false,
-                      openTime: "08:00",
-                      closeTime: "17:00",
-                    };
-                    return (
-                      <div
-                        key={wd.key}
-                        className="grid grid-cols-[auto_1fr_6.75rem_6.75rem] items-center gap-2 rounded-lg px-1 py-1.5 hover:bg-slate-50"
+                <ChevronDown size={16} color="#64748b" />
+              </View>
+            </Pressable>
+
+            {scheduleOpen ? (
+              <View className="mt-1 rounded-xl border border-slate-200 bg-white p-2">
+                <Text className="mb-2 px-1 text-[11px] text-slate-400">
+                  Cochez les jours ouvrés et l&apos;horaire de chaque jour.
+                </Text>
+                <View className="flex-row items-center gap-2 px-1 pb-1">
+                  <View className="w-[22px]" />
+                  <Text className="flex-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Jour
+                  </Text>
+                  <Text className="w-[76px] text-center text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Début
+                  </Text>
+                  <Text className="w-[76px] text-center text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Fin
+                  </Text>
+                </View>
+                {WEEKDAYS.map((wd) => {
+                  const day = draft.week[wd.key] ?? {
+                    open: false,
+                    openTime: "08:00",
+                    closeTime: "17:00",
+                  };
+                  return (
+                    <View
+                      key={wd.key}
+                      className="flex-row items-center gap-2 rounded-lg px-1 py-1.5"
+                    >
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={wd.label}
+                        accessibilityState={{ checked: day.open }}
+                        hitSlop={8}
+                        onPress={() => updateDay(wd.key, { open: !day.open })}
+                        className={cn(
+                          "h-[22px] w-[22px] items-center justify-center rounded-md border",
+                          day.open ? "border-navy bg-navy" : "border-line-strong bg-white",
+                        )}
                       >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-navy"
-                          checked={day.open}
-                          disabled={!editing}
-                          onChange={(e) =>
-                            updateDay(wd.key, { open: e.target.checked })
-                          }
-                        />
-                        <span
-                          className={`text-sm ${
-                            day.open
-                              ? "font-medium text-slate-800"
-                              : "text-slate-400"
-                          }`}
-                        >
-                          {wd.label}
-                        </span>
-                        <Input
-                          type="time"
-                          className="h-8"
-                          disabled={!editing || !day.open}
-                          value={day.openTime}
-                          onChange={(e) =>
-                            updateDay(wd.key, { openTime: e.target.value })
-                          }
-                        />
-                        <Input
-                          type="time"
-                          className="h-8"
-                          disabled={!editing || !day.open}
-                          value={day.closeTime}
-                          onChange={(e) =>
-                            updateDay(wd.key, { closeTime: e.target.value })
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600">
-                Puissance souscrite (kVA)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.1"
-                placeholder="ex : 12 kVA"
-                className="h-9"
-                disabled={!editing}
-                value={draft.subscribedKva ?? ""}
-                onChange={(e) => {
-                  const n = e.target.value === "" ? null : Number(e.target.value);
-                  setDraft((p) => ({
-                    ...p,
-                    subscribedKva: n != null && Number.isFinite(n) ? n : null,
-                  }));
-                }}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                        {day.open ? <Check size={14} color="#fff" /> : null}
+                      </Pressable>
+                      <Text
+                        className={cn(
+                          "flex-1 text-sm",
+                          day.open ? "font-medium text-slate-800" : "text-slate-400",
+                        )}
+                      >
+                        {wd.label}
+                      </Text>
+                      <TimeField
+                        label={`${wd.label} — début`}
+                        disabled={!day.open}
+                        value={day.openTime}
+                        onCommit={(openTime) => updateDay(wd.key, { openTime })}
+                      />
+                      <TimeField
+                        label={`${wd.label} — fin`}
+                        disabled={!day.open}
+                        value={day.closeTime}
+                        onCommit={(closeTime) => updateDay(wd.key, { closeTime })}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+
+          <View className="gap-1.5">
+            <FieldLabel>Puissance souscrite (kVA)</FieldLabel>
+            <Input
+              keyboardType="decimal-pad"
+              placeholder="ex : 12 kVA"
+              className="h-10"
+              value={kvaText}
+              onChangeText={(text) => {
+                setKvaText(text);
+                const cleaned = text.replace(",", ".").trim();
+                const n = cleaned === "" ? null : Number(cleaned);
+                setDraft((p) => ({
+                  ...p,
+                  subscribedKva: n != null && Number.isFinite(n) ? n : null,
+                }));
+              }}
+            />
+          </View>
+        </Card>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="relative flex min-h-[11.5rem] overflow-hidden rounded-[24px] bg-navy-dark px-5 py-5 text-white shadow-joya-sm">
-          <div
-            className="pointer-events-none absolute -bottom-10 -right-6 h-32 w-32 rounded-full bg-coral/25 blur-2xl"
-            aria-hidden
-          />
-          <div className="relative flex w-full items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[13px] font-medium text-white/75">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10">
-                  <Activity className="h-3.5 w-3.5" aria-hidden />
-                </span>
-                Total du jour
-              </p>
-              <p className="mt-3 font-display text-[2.15rem] font-bold leading-none tracking-tight tabular-nums">
+      {/* KPI cards */}
+      <View className="gap-4">
+        <View className="relative min-h-[184px] flex-row overflow-hidden rounded-[24px] bg-navy-dark px-5 py-5 shadow-joya-sm">
+          <View
+            pointerEvents="none"
+            className="absolute -bottom-10 -right-6 h-32 w-32"
+          >
+            <Svg width={128} height={128}>
+              <Defs>
+                <RadialGradient id="eff-glow" cx="50%" cy="50%" r="50%">
+                  <Stop offset="0%" stopColor={JOYA_CHART.coral} stopOpacity={0.4} />
+                  <Stop offset="100%" stopColor={JOYA_CHART.coral} stopOpacity={0} />
+                </RadialGradient>
+              </Defs>
+              <Rect width={128} height={128} fill="url(#eff-glow)" />
+            </Svg>
+          </View>
+          <View className="w-full flex-row items-center justify-between gap-3">
+            <View className="min-w-0 shrink">
+              <View className="flex-row items-center gap-2">
+                <View className="h-7 w-7 items-center justify-center rounded-lg bg-white/10">
+                  <Activity size={14} color="#fff" />
+                </View>
+                <Text className="text-[13px] font-medium text-white/75">
+                  Total du jour
+                </Text>
+              </View>
+              <Text
+                className="mt-3 font-display text-[34px] font-bold leading-none tracking-tight text-white"
+                style={TABULAR}
+              >
                 {kwhNum(snapshot.totalKwh)}
-                <span className="ml-1.5 align-middle text-[15px] font-semibold text-white/50">
-                  kWh
-                </span>
-              </p>
-              <div className="mt-4 space-y-1.5 text-[12px] text-white/70">
-                <p className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-white" aria-hidden />
-                  Fonctionnement
-                </p>
-                <p className="flex items-center gap-2">
-                  <span
+                <Text className="text-[15px] font-semibold text-white/50"> kWh</Text>
+              </Text>
+              <View className="mt-4 gap-1.5">
+                <View className="flex-row items-center gap-2">
+                  <View className="h-2 w-2 rounded-full bg-white" />
+                  <Text className="text-[12px] text-white/70">Fonctionnement</Text>
+                </View>
+                <View className="flex-row items-center gap-2">
+                  <View
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: OFF_COLOR }}
-                    aria-hidden
                   />
-                  Hors fonct.
-                </p>
-              </div>
-              <p className="mt-4 max-w-[11rem] text-[11px] leading-snug text-white/40">
+                  <Text className="text-[12px] text-white/70">Hors fonct.</Text>
+                </View>
+              </View>
+              <Text className="mt-4 max-w-[176px] text-[11px] leading-snug text-white/40">
                 Production équivalente non déduite
-              </p>
-            </div>
+              </Text>
+            </View>
             <OffShareDonut percent={snapshot.offSharePct} />
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="relative flex min-h-[11.5rem] flex-col overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
-          <p className="relative flex items-center gap-2 text-[13px] font-medium text-slate-500">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
-              <Sun className="h-3.5 w-3.5 text-navy/55" aria-hidden />
-            </span>
-            Heures de fonctionnement
-          </p>
-          <p className="relative mt-4 font-display text-[2.15rem] font-bold leading-none tracking-tight tabular-nums text-navy">
+        <View className="min-h-[184px] overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
+          <View className="flex-row items-center gap-2">
+            <View className="h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
+              <Sun size={14} color="rgba(23,59,94,0.55)" />
+            </View>
+            <Text className="text-[13px] font-medium text-slate-500">
+              Heures de fonctionnement
+            </Text>
+          </View>
+          <Text
+            className="mt-4 font-display text-[34px] font-bold leading-none tracking-tight text-navy"
+            style={TABULAR}
+          >
             {kwhNum(snapshot.operatingKwh)}
-            <span className="ml-1.5 align-middle text-[15px] font-semibold text-slate-400">
-              kWh
-            </span>
-          </p>
-          <div className="relative mt-auto flex items-end justify-between gap-2 pt-6">
-            <p className="text-xs text-slate-400">Journée affichée</p>
+            <Text className="text-[15px] font-semibold text-slate-400"> kWh</Text>
+          </Text>
+          <View className="mt-auto flex-row items-end justify-between gap-2 pt-6">
+            <Text className="text-xs text-slate-400">Journée affichée</Text>
             {snapshot.operatingDt != null ? (
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-navy/70">
-                {tndBadge(snapshot.operatingDt)}
-              </span>
+              <View className="rounded-full bg-slate-100 px-2.5 py-1">
+                <Text
+                  className="text-[11px] font-semibold text-navy/70"
+                  style={TABULAR}
+                >
+                  {tndBadge(snapshot.operatingDt)}
+                </Text>
+              </View>
             ) : null}
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="relative flex min-h-[11.5rem] flex-col overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
-          <p className="relative flex items-center gap-2 text-[13px] font-medium text-slate-500">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
-              <Moon className="h-3.5 w-3.5 text-coral" aria-hidden />
-            </span>
-            Hors fonctionnement
-          </p>
-          <p className="relative mt-4 font-display text-[2.15rem] font-bold leading-none tracking-tight tabular-nums text-navy">
+        <View className="min-h-[184px] overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
+          <View className="flex-row items-center gap-2">
+            <View className="h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
+              <Moon size={14} color={joyaColors.coral} />
+            </View>
+            <Text className="text-[13px] font-medium text-slate-500">
+              Hors fonctionnement
+            </Text>
+          </View>
+          <Text
+            className="mt-4 font-display text-[34px] font-bold leading-none tracking-tight text-navy"
+            style={TABULAR}
+          >
             {kwhNum(snapshot.offKwh)}
-            <span className="ml-1.5 align-middle text-[15px] font-semibold text-slate-400">
-              kWh
-            </span>
-          </p>
-          <div className="relative mt-auto flex items-end justify-between gap-2 pt-6">
-            <p className="text-xs text-slate-400">Gaspillage potentiel</p>
+            <Text className="text-[15px] font-semibold text-slate-400"> kWh</Text>
+          </Text>
+          <View className="mt-auto flex-row items-end justify-between gap-2 pt-6">
+            <Text className="text-xs text-slate-400">Gaspillage potentiel</Text>
             {snapshot.offDt != null ? (
-              <span className="rounded-full bg-coral-wash px-2.5 py-1 text-[11px] font-semibold tabular-nums text-coral-dark">
-                {tndBadge(snapshot.offDt)}
-              </span>
+              <View className="rounded-full bg-coral-wash px-2.5 py-1">
+                <Text
+                  className="text-[11px] font-semibold text-coral-dark"
+                  style={TABULAR}
+                >
+                  {tndBadge(snapshot.offDt)}
+                </Text>
+              </View>
             ) : null}
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="relative flex min-h-[11.5rem] flex-col overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
-          <p className="relative flex items-center gap-2 text-[13px] font-medium text-slate-500">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
-              <Clock className="h-3.5 w-3.5 text-amber-500" aria-hidden />
-            </span>
-            Part hors fonct.
-          </p>
-          <p className="relative mt-4 font-display text-[2.15rem] font-bold leading-none tracking-tight tabular-nums text-navy">
+        <View className="min-h-[184px] overflow-hidden rounded-[24px] bg-white px-5 py-5 shadow-joya-sm">
+          <View className="flex-row items-center gap-2">
+            <View className="h-7 w-7 items-center justify-center rounded-lg bg-slate-50">
+              <Clock size={14} color="#f59e0b" />
+            </View>
+            <Text className="text-[13px] font-medium text-slate-500">
+              Part hors fonct.
+            </Text>
+          </View>
+          <Text
+            className="mt-4 font-display text-[34px] font-bold leading-none tracking-tight text-navy"
+            style={TABULAR}
+          >
             {snapshot.offSharePct != null ? snapshot.offSharePct : "—"}
-            <span className="ml-1.5 align-middle text-[15px] font-semibold text-slate-400">
-              %
-            </span>
-          </p>
-          <div className="relative mt-auto pt-6">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-300 to-coral"
-                style={{ width: `${snapshot.offSharePct ?? 0}%` }}
+            <Text className="text-[15px] font-semibold text-slate-400"> %</Text>
+          </Text>
+          <View className="mt-auto pt-6">
+            <View className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <LinearGradient
+                colors={["#fcd34d", JOYA_CHART.coral]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={{
+                  height: "100%",
+                  borderRadius: 999,
+                  width: `${Math.min(100, Math.max(0, snapshot.offSharePct ?? 0))}%`,
+                }}
               />
-            </div>
-            <p className="mt-2.5 text-xs text-slate-400">De la conso. totale</p>
-          </div>
-        </div>
-      </div>
+            </View>
+            <Text className="mt-2.5 text-xs text-slate-400">De la conso. totale</Text>
+          </View>
+        </View>
+      </View>
 
-      <section className="flex min-w-0 flex-col rounded-2xl border border-line bg-white p-5 shadow-joya-sm sm:p-6">
-        <div className="min-w-0">
-          <h2 className="font-display text-[1.35rem] font-bold tracking-[-0.025em] text-navy-dark">
+      {/* Hourly chart */}
+      <View className="min-w-0 rounded-2xl border border-line bg-white p-5 shadow-joya-sm">
+        <View className="min-w-0">
+          <Text className="font-display text-[21px] font-bold tracking-[-0.5px] text-navy-dark">
             Consommation horaire · 24h
-          </h2>
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13.5px] text-ink-muted">
-            <span className="inline-flex items-center gap-2">
-              <span
+          </Text>
+          <View className="mt-2.5 flex-row flex-wrap items-center gap-x-5 gap-y-1.5">
+            <View className="flex-row items-center gap-2">
+              <View
                 className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: OP_COLOR }}
-                aria-hidden
               />
-              Heures de fonctionnement (kWh)
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <span
+              <Text className="text-[13.5px] text-ink-muted">
+                Heures de fonctionnement (kWh)
+              </Text>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <View
                 className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: OFF_COLOR }}
-                aria-hidden
               />
-              Heures hors fonctionnement (kWh)
-            </span>
-          </div>
-        </div>
+              <Text className="text-[13.5px] text-ink-muted">
+                Heures hors fonctionnement (kWh)
+              </Text>
+            </View>
+          </View>
+        </View>
 
-        <div className="relative mt-4 h-64 sm:h-72">
+        <View className="relative mt-4 h-64">
           <JoyaBarChart
             bars={snapshot.bars.map((b) => ({
               label: b.label,
@@ -781,95 +966,117 @@ export function EnergyEfficiencySection({
             highlightBand={operatingBand}
             renderTooltip={(i) => {
               const b = snapshot.bars[i];
+              if (!b) return null;
               return (
-                <div className="min-w-[13rem]">
+                <View className="min-w-[200px]">
                   <TooltipTitle>Heure {b.label}</TooltipTitle>
-                  <div className="mt-2 space-y-1.5 text-sm">
-                    <p className="flex items-center gap-2">
-                      <span
+                  <View className="mt-2 gap-1.5">
+                    <View className="flex-row items-center gap-2">
+                      <View
                         className="h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: OP_COLOR }}
-                        aria-hidden
                       />
-                      <span className="text-ink-muted">Fonctionnement</span>
-                      <span className="ml-auto font-display font-bold tabular-nums text-navy">
+                      <Text className="flex-1 text-sm text-ink-muted">
+                        Fonctionnement
+                      </Text>
+                      <Text
+                        className="font-display text-sm font-bold text-navy"
+                        style={TABULAR}
+                      >
                         {formatValue(b.operating, "kWh", 2)}
-                      </span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <span
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center gap-2">
+                      <View
                         className="h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: OFF_COLOR }}
-                        aria-hidden
                       />
-                      <span className="text-ink-muted">Hors fonctionnement</span>
-                      <span className="ml-auto font-display font-bold tabular-nums text-navy">
+                      <Text className="flex-1 text-sm text-ink-muted">
+                        Hors fonctionnement
+                      </Text>
+                      <Text
+                        className="font-display text-sm font-bold text-navy"
+                        style={TABULAR}
+                      >
                         {formatValue(b.off, "kWh", 2)}
-                      </span>
-                    </p>
-                  </div>
-                </div>
+                      </Text>
+                    </View>
+                  </View>
+                </View>
               );
             }}
           />
-        </div>
+        </View>
 
-        <p className="mt-3 border-t border-line pt-3 text-[13px] text-ink-muted">
+        <Text className="mt-3 border-t border-line pt-3 text-[13px] text-ink-muted">
           Répartition calculée à partir des kWh horaires du compteur et des
           horaires déclarés du site (même source que l&apos;onglet Consommation).
-        </p>
-      </section>
+        </Text>
+      </View>
 
-      <section>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-[linear-gradient(165deg,#f4a07e_0%,var(--joya-coral)_48%,#d85a38_100%)] text-white shadow-[0_10px_20px_-10px_rgb(227_112_81_/_0.85)]">
-              <Search className="h-[18px] w-[18px] stroke-[2.4]" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <h3 className="font-display text-[1.2rem] font-bold tracking-tight text-navy">
+      {/* Alerts */}
+      <View>
+        <View className="mb-3 gap-3">
+          <View className="flex-row items-start gap-3">
+            <LinearGradient
+              colors={["#f4a07e", JOYA_CHART.coral, "#d85a38"]}
+              start={{ x: 0.2, y: 0 }}
+              end={{ x: 0.8, y: 1 }}
+              style={{
+                marginTop: 2,
+                width: 44,
+                height: 44,
+                borderRadius: 14,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Search size={18} color="#fff" strokeWidth={2.4} />
+            </LinearGradient>
+            <View className="min-w-0 flex-1">
+              <Text className="font-display text-[19px] font-bold tracking-tight text-navy">
                 Ce que nous détectons pour vous
-              </h3>
-              <p className="mt-0.5 text-[13px] text-ink-muted">
+              </Text>
+              <Text className="mt-0.5 text-[13px] text-ink-muted">
                 Pour chaque alerte : pourquoi elle se déclenche, ce que cela
                 implique et ce que nous vous conseillons.
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-stretch gap-2">
-            <div className="rounded-[14px] border border-line bg-white px-3.5 py-2 text-center shadow-joya-xs">
-              <p className="text-[11px] font-medium text-ink-muted">Alertes</p>
-              <p className="font-display text-lg font-bold tabular-nums leading-none text-navy">
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row items-stretch gap-2">
+            <View className="items-center rounded-[14px] border border-line bg-white px-3.5 py-2 shadow-joya-xs">
+              <Text className="text-[11px] font-medium text-ink-muted">Alertes</Text>
+              <Text
+                className="font-display text-lg font-bold leading-none text-navy"
+                style={TABULAR}
+              >
                 {snapshot.alerts.length}
-              </p>
-            </div>
-            <div className="rounded-[14px] border border-line bg-white px-3.5 py-2 text-right shadow-joya-xs">
-              <p className="text-[11px] font-medium text-ink-muted">
+              </Text>
+            </View>
+            <View className="items-end rounded-[14px] border border-line bg-white px-3.5 py-2 shadow-joya-xs">
+              <Text className="text-[11px] font-medium text-ink-muted">
                 Économie potentielle
-              </p>
-              <p className="font-display text-[1.05rem] font-bold tabular-nums leading-none text-coral">
-                {formatDt(
-                  snapshot.alerts.reduce(
-                    (sum, alert) => sum + (alert.savingsDtMonth ?? 0),
-                    0,
-                  ),
-                )}
-                <span className="ml-1 align-middle font-sans text-[12px] font-semibold">
-                  DT
-                </span>
-                <span className="ml-0.5 align-middle font-sans text-[11px] font-medium text-ink-muted">
-                  /mois
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
+              </Text>
+              <Text
+                className="font-display text-[17px] font-bold leading-none text-coral"
+                style={TABULAR}
+              >
+                {formatDt(totalSavings)}
+                <Text className="text-[12px] font-semibold"> DT</Text>
+                <Text className="text-[11px] font-medium text-ink-muted"> /mois</Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {snapshot.alerts.length === 0 ? (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-            Aucune alerte pour cette journée.
-          </p>
+          <View className="rounded-xl border border-slate-200 bg-white px-4 py-8">
+            <Text className="text-center text-sm text-slate-500">
+              Aucune alerte pour cette journée.
+            </Text>
+          </View>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <View className="gap-3">
             {snapshot.alerts.map((alert) => {
               const expandedId =
                 openAlertId === undefined ? snapshot.alerts[0]?.id : openAlertId;
@@ -884,9 +1091,9 @@ export function EnergyEfficiencySection({
                 />
               );
             })}
-          </ul>
+          </View>
         )}
-      </section>
-    </div>
+      </View>
+    </View>
   );
 }

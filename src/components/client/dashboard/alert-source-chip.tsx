@@ -1,3 +1,4 @@
+import { Text, View } from "react-native";
 import { cn } from "@/lib/utils";
 
 type AlertSourceChipProps = {
@@ -14,16 +15,24 @@ export function AlertSourceChip({
   if (!label?.trim()) return null;
 
   return (
-    <span
+    <View
       className={cn(
-        "inline-flex max-w-full items-center truncate rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px]",
+        "max-w-full self-start rounded-full px-2 py-0.5",
         variant === "modal"
-          ? "border border-white/20 bg-white/10 text-white/80"
-          : "bg-slate-100 text-slate-600",
+          ? "border border-white/20 bg-white/10"
+          : "bg-slate-100",
         className,
       )}
     >
-      {label}
-    </span>
+      <Text
+        numberOfLines={1}
+        className={cn(
+          "text-[10px] font-medium",
+          variant === "modal" ? "text-white/80" : "text-slate-600",
+        )}
+      >
+        {label}
+      </Text>
+    </View>
   );
 }

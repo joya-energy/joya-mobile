@@ -1,25 +1,19 @@
-"use client";
-
-import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { consumptionApi } from "@/lib/consumption/api";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { JOYA_CHART, JOYA_RECHARTS } from "@/components/joya/chart-theme";
-import { StatBox } from "@/components/client/consumption/edge-consumption-charts";
+import { JOYA_CHART } from "@/components/joya/chart-theme";
+import {
+  JoyaBarChart,
+  TooltipTitle,
+  TooltipValue,
+} from "@/components/client/dashboard/chart-kit";
+import { PillSelect } from "@/components/client/onboarding-info/pill-select";
+import {
+  AccentTitle,
+  StatBox,
+} from "@/components/client/consumption/edge-consumption-charts";
 
 const MONTH_LABELS = [
   "Janvier",
@@ -116,27 +110,43 @@ function enumerateMonths(fromYmd: string, toYmd: string): YearMonth[] {
   return out;
 }
 
+type OutageWindow = { start: string | null; end: string | null };
+
+const EMPTY_OUTAGE_WINDOWS: OutageWindow[] = Array.from({ length: 12 }, () => ({
+  start: null,
+  end: null,
+}));
+
+function configuredHours(window: OutageWindow | undefined): number {
+  if (!window?.start || !window?.end) return 0;
+  const start = Number(window.start.slice(0, 2));
+  const end = Number(window.end.slice(0, 2));
+  return Math.max(0, end - start);
+}
+
 function dailyTotal(
   year: number,
   monthIndex: number,
   dayIndex: number,
   fromYmd: string,
   toYmd: string,
+  windows: OutageWindow[],
 ): number {
   const ymd = ymdOf(year, monthIndex, dayIndex + 1);
   if (ymd < fromYmd || ymd > toYmd) return 0;
-  return 0;
+  return configuredHours(windows[monthIndex]);
 }
 
 function daysOfMonth(
   ym: YearMonth,
   fromYmd: string,
   toYmd: string,
+  windows: OutageWindow[],
 ): { label: string; hours: number }[] {
   const last = daysInMonth(ym.year, ym.month);
   return Array.from({ length: last }, (_, i) => ({
     label: String(i + 1),
-    hours: dailyTotal(ym.year, ym.month, i, fromYmd, toYmd),
+    hours: dailyTotal(ym.year, ym.month, i, fromYmd, toYmd, windows),
   }));
 }
 
@@ -144,8 +154,12 @@ function hoursInMonth(
   ym: YearMonth,
   fromYmd: string,
   toYmd: string,
+  windows: OutageWindow[],
 ): number {
-  return daysOfMonth(ym, fromYmd, toYmd).reduce((sum, row) => sum + row.hours, 0);
+  return daysOfMonth(ym, fromYmd, toYmd, windows).reduce(
+    (sum, row) => sum + row.hours,
+    0,
+  );
 }
 
 type Props = {
@@ -163,6 +177,25 @@ export function ClientPowerOutageHoursChart({ trackingSince }: Props) {
 
   const [period, setPeriod] = useState<Period>("day");
   const [cursor, setCursor] = useState(todayYmd);
+  const [windows, setWindows] = useState<OutageWindow[]>(EMPTY_OUTAGE_WINDOWS);
+
+  useEffect(() => {
+    let cancelled = false;
+    void consumptionApi
+      .getPowerOutageHours()
+      .then((data) => {
+        const loaded = data.months ?? [];
+        if (!cancelled) {
+          setWindows(loaded.length === 12 ? loaded : EMPTY_OUTAGE_WINDOWS);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWindows(EMPTY_OUTAGE_WINDOWS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const months = useMemo(
     () => enumerateMonths(fromYmd, todayYmd),
@@ -174,37 +207,32 @@ export function ClientPowerOutageHoursChart({ trackingSince }: Props) {
   );
 
   const activeCursor = clampYmd(cursor, fromYmd, todayYmd);
-  const active = parseYmd(activeCursor);
-  const activeYm: YearMonth = { year: active.year, month: active.month };
-  const dayRows = useMemo(
-    () =>
-      daysOfMonth(
-        { year: active.year, month: active.month },
-        fromYmd,
-        todayYmd,
-      ),
-    [active.month, active.year, fromYmd, todayYmd],
+  const { year: activeYear, month: activeMonth } = parseYmd(activeCursor);
+  const activeYm: YearMonth = { year: activeYear, month: activeMonth };
+  // Cheap derivations — left to the React Compiler to memoize.
+  const dayRows = daysOfMonth(
+    { year: activeYear, month: activeMonth },
+    fromYmd,
+    todayYmd,
+    windows,
   );
-  const monthRows = useMemo(
-    () =>
-      MONTH_SHORT.map((label, month) => ({
-        label,
-        hours: hoursInMonth({ year: active.year, month }, fromYmd, todayYmd),
-      })),
-    [active.year, fromYmd, todayYmd],
-  );
-  const yearRows = useMemo(
-    () =>
-      years.map((year) => ({
-        label: String(year),
-        hours: MONTH_SHORT.reduce(
-          (sum, _label, month) =>
-            sum + hoursInMonth({ year, month }, fromYmd, todayYmd),
-          0,
-        ),
-      })),
-    [fromYmd, todayYmd, years],
-  );
+  const monthRows = MONTH_SHORT.map((label, month) => ({
+    label,
+    hours: hoursInMonth(
+      { year: activeYear, month },
+      fromYmd,
+      todayYmd,
+      windows,
+    ),
+  }));
+  const yearRows = years.map((year) => ({
+    label: String(year),
+    hours: MONTH_SHORT.reduce(
+      (sum, _label, month) =>
+        sum + hoursInMonth({ year, month }, fromYmd, todayYmd, windows),
+      0,
+    ),
+  }));
 
   const chartRows =
     period === "day" ? dayRows : period === "month" ? monthRows : yearRows;
@@ -227,7 +255,7 @@ export function ClientPowerOutageHoursChart({ trackingSince }: Props) {
         ]
       : period === "month"
         ? [
-            { label: `Total ${active.year}`, value: formatHours(yearTotal) },
+            { label: `Total ${activeYear}`, value: formatHours(yearTotal) },
             {
               label: "Moyenne / mois",
               value: formatHours(Math.round(yearTotal / monthsWithData)),
@@ -241,146 +269,130 @@ export function ClientPowerOutageHoursChart({ trackingSince }: Props) {
             },
           ];
 
-  const yDomain: [number, number | "auto"] =
-    period === "day" ? [0, 24] : [0, "auto"];
+  const tooltipCaption =
+    period === "day"
+      ? "Coupure / jour"
+      : period === "month"
+        ? "Coupure / mois"
+        : "Coupure / an";
 
   return (
-    <section className="rounded-[22px] border border-line bg-white p-4 shadow-joya-sm sm:p-5">
-      <div>
-        <h2 className="flex items-center gap-2 font-display text-[1.15rem] font-bold tracking-tight text-navy">
-          <span className="h-4 w-[3px] rounded-full bg-coral" aria-hidden />
+    <Card className="rounded-[22px] border-line bg-white p-4 shadow-joya-sm">
+      <View>
+        <AccentTitle size="lg">
           Historique des coupures d&apos;électricité
-        </h2>
-        <p className="mt-0.5 text-[13px] text-ink-muted">
+        </AccentTitle>
+        <Text className="mt-0.5 text-[13px] text-ink-muted">
           h · moyenne par intervalle
-        </p>
-      </div>
+        </Text>
+      </View>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
+      <View className="mt-4 flex-row flex-wrap gap-1.5">
         {PERIODS.map((p) => (
-          <button
+          <Pressable
             key={p.id}
-            type="button"
-            onClick={() => setPeriod(p.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: period === p.id }}
+            onPress={() => setPeriod(p.id)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
-              period === p.id
-                ? "bg-navy text-white shadow-joya-xs"
-                : "bg-transparent text-slate-500 hover:bg-cream hover:text-navy",
+              "rounded-full px-3.5 py-1.5",
+              period === p.id ? "bg-navy shadow-joya-xs" : "bg-transparent",
             )}
           >
-            {p.label}
-          </button>
+            <Text
+              className={cn(
+                "text-xs font-semibold",
+                period === p.id ? "text-white" : "text-slate-500",
+              )}
+            >
+              {p.label}
+            </Text>
+          </Pressable>
         ))}
-      </div>
+      </View>
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
+      <View className="mt-4 gap-3">
         {period === "day" ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <View className="gap-1.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               Mois
-            </span>
-            <Select
+            </Text>
+            <PillSelect
+              label="Mois"
+              className="h-10 self-start border-slate-200 px-4"
               value={ymKey(activeYm)}
-              onValueChange={(value) => {
+              options={months.map((ym) => ({
+                value: ymKey(ym),
+                label: `${MONTH_LABELS[ym.month]} ${ym.year}`,
+              }))}
+              onChange={(value) => {
                 const [year, month] = value.split("-").map(Number);
                 setCursor(clampYmd(ymdOf(year, month - 1, 1), fromYmd, todayYmd));
               }}
-            >
-              <SelectTrigger className="h-10 w-[200px] rounded-full border-slate-200 px-4">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((ym) => (
-                  <SelectItem key={ymKey(ym)} value={ymKey(ym)}>
-                    {MONTH_LABELS[ym.month]} {ym.year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            />
+          </View>
         ) : null}
 
         {period === "month" ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <View className="gap-1.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               Année
-            </span>
-            <Select
-              value={String(active.year)}
-              onValueChange={(value) => {
+            </Text>
+            <PillSelect
+              label="Année"
+              className="h-10 self-start border-slate-200 px-4"
+              value={String(activeYear)}
+              options={years.map((year) => ({
+                value: String(year),
+                label: String(year),
+              }))}
+              onChange={(value) => {
                 const year = Number(value);
                 setCursor(clampYmd(`${year}-12-01`, fromYmd, todayYmd));
               }}
-            >
-              <SelectTrigger className="h-10 w-[140px] rounded-full border-slate-200 px-4">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={String(year)}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            />
+          </View>
         ) : null}
 
-        {stats.map((stat, index) => (
-          <StatBox
-            key={stat.label}
-            tone={index === 0 ? "accent" : "muted"}
-            label={stat.label}
-            value={stat.value}
-          />
-        ))}
-      </div>
+        <View className="flex-row flex-wrap gap-2">
+          {stats.map((stat, index) => (
+            <StatBox
+              key={stat.label}
+              tone={index === 0 ? "accent" : "muted"}
+              label={stat.label}
+              value={stat.value}
+            />
+          ))}
+        </View>
+      </View>
 
-      <div className="mt-4 h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={chartRows}
-            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-            barCategoryGap={period === "day" ? "28%" : "32%"}
-          >
-            <CartesianGrid {...JOYA_RECHARTS.grid} />
-            <XAxis
-              dataKey="label"
-              tick={JOYA_RECHARTS.tick}
-              axisLine={JOYA_RECHARTS.axisLine}
-              tickLine={false}
-              interval={period === "day" ? 1 : 0}
-            />
-            <YAxis
-              tick={JOYA_RECHARTS.tick}
-              width={40}
-              axisLine={false}
-              tickLine={false}
-              allowDecimals={false}
-              domain={yDomain}
-            />
-            <Tooltip
-              contentStyle={JOYA_RECHARTS.tooltip}
-              formatter={(value: number) => [
-                formatHours(value),
-                period === "day"
-                  ? "Coupure / jour"
-                  : period === "month"
-                    ? "Coupure / mois"
-                    : "Coupure / an",
-              ]}
-            />
-            <Bar
-              dataKey="hours"
-              name="Heures"
-              fill={CHART_COLOR}
-              radius={[8, 8, 8, 8]}
-              maxBarSize={18}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
+      <View className="relative mt-4 h-60 w-full">
+        <JoyaBarChart
+          key={`${period}-${chartRows.length}`}
+          bars={chartRows.map((row) => ({
+            label: row.label,
+            value: row.hours,
+          }))}
+          color={CHART_COLOR}
+          unit="h"
+          ariaLabel="Historique des coupures d'électricité"
+          showAverage={false}
+          bestLabel=""
+          barWidthRatio={period === "day" ? 0.6 : 0.5}
+          renderTooltip={(i) => (
+            <>
+              <TooltipTitle>
+                {period === "day"
+                  ? `${chartRows[i]?.label} ${MONTH_LABELS[activeMonth]} ${activeYear}`
+                  : chartRows[i]?.label}
+              </TooltipTitle>
+              <TooltipValue color={CHART_COLOR}>
+                {`${formatHours(chartRows[i]?.hours ?? 0)} · ${tooltipCaption}`}
+              </TooltipValue>
+            </>
+          )}
+        />
+      </View>
+    </Card>
   );
 }

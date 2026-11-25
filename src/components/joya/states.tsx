@@ -1,7 +1,19 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Inbox, Loader2, RefreshCw, type LucideIcon } from "lucide-react";
+import {
+  ActivityIndicator,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import {
+  AlertTriangle,
+  Inbox,
+  type LucideIcon,
+} from "lucide-react-native";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { joyaColors } from "@/theme/colors";
 
 type JoyaEmptyStateProps = {
   icon?: LucideIcon;
@@ -10,9 +22,9 @@ type JoyaEmptyStateProps = {
   action?: ReactNode;
   compact?: boolean;
   className?: string;
+  style?: StyleProp<ViewStyle>;
 };
 
-/** Empty state: soft icon tile, short message, optional action. */
 export function JoyaEmptyState({
   icon: Icon = Inbox,
   title,
@@ -20,32 +32,43 @@ export function JoyaEmptyState({
   action,
   compact = false,
   className,
+  style,
 }: JoyaEmptyStateProps) {
   return (
-    <div
+    <View
+      style={style}
       className={cn(
-        "flex flex-col items-center justify-center text-center",
+        "items-center justify-center",
         compact ? "gap-2 px-4 py-8" : "gap-3 px-6 py-14",
         className,
       )}
     >
-      <span
+      <View
         className={cn(
-          "grid place-items-center rounded-2xl bg-coral-soft text-coral",
+          "items-center justify-center rounded-2xl bg-coral-soft",
           compact ? "h-10 w-10" : "h-14 w-14",
         )}
-        aria-hidden
       >
-        <Icon className={compact ? "h-5 w-5" : "h-6 w-6"} />
-      </span>
-      <p className={cn("font-display font-semibold text-navy", compact ? "text-sm" : "text-base")}>
+        <Icon
+          size={compact ? 20 : 24}
+          color={joyaColors.coral}
+        />
+      </View>
+      <Text
+        className={cn(
+          "text-center font-display font-semibold text-navy",
+          compact ? "text-sm" : "text-base",
+        )}
+      >
         {title}
-      </p>
+      </Text>
       {description ? (
-        <p className="max-w-sm text-[13px] leading-relaxed text-ink-muted">{description}</p>
+        <Text className="max-w-sm text-center text-[13px] leading-relaxed text-ink-muted">
+          {description}
+        </Text>
       ) : null}
-      {action ? <div className="mt-1">{action}</div> : null}
-    </div>
+      {action ? <View className="mt-1">{action}</View> : null}
+    </View>
   );
 }
 
@@ -56,9 +79,9 @@ type JoyaErrorStateProps = {
   retryLabel?: string;
   compact?: boolean;
   className?: string;
+  style?: StyleProp<ViewStyle>;
 };
 
-/** Error state with retry. Message must be human readable (no stack/codes). */
 export function JoyaErrorState({
   title = "Impossible de charger ces données",
   description = "Vérifiez votre connexion ou réessayez dans un instant.",
@@ -66,42 +89,56 @@ export function JoyaErrorState({
   retryLabel = "Réessayer",
   compact = false,
   className,
+  style,
 }: JoyaErrorStateProps) {
   return (
-    <div
-      role="alert"
+    <View
+      style={style}
+      accessibilityRole="alert"
       className={cn(
-        "flex flex-col items-center justify-center text-center",
+        "items-center justify-center",
         compact ? "gap-2 px-4 py-8" : "gap-3 px-6 py-14",
         className,
       )}
     >
-      <span
+      <View
         className={cn(
-          "grid place-items-center rounded-2xl bg-danger-soft text-danger",
+          "items-center justify-center rounded-2xl bg-danger-soft",
           compact ? "h-10 w-10" : "h-14 w-14",
         )}
-        aria-hidden
       >
-        <AlertTriangle className={compact ? "h-5 w-5" : "h-6 w-6"} />
-      </span>
-      <p className={cn("font-display font-semibold text-navy", compact ? "text-sm" : "text-base")}>
+        <AlertTriangle
+          size={compact ? 20 : 24}
+          color={joyaColors.danger}
+        />
+      </View>
+      <Text
+        className={cn(
+          "text-center font-display font-semibold text-navy",
+          compact ? "text-sm" : "text-base",
+        )}
+      >
         {title}
-      </p>
+      </Text>
       {description ? (
-        <p className="max-w-sm text-[13px] leading-relaxed text-ink-muted">{description}</p>
+        <Text className="max-w-sm text-center text-[13px] leading-relaxed text-ink-muted">
+          {description}
+        </Text>
       ) : null}
       {onRetry ? (
-        <Button variant="outline" size="sm" onClick={onRetry} className="mt-1">
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={onRetry}
+          className="mt-1"
+        >
           {retryLabel}
         </Button>
       ) : null}
-    </div>
+    </View>
   );
 }
 
-/** Full-area spinner with brand mark colour — for route-level loading. */
 export function JoyaLoadingState({
   label = "Chargement…",
   className,
@@ -110,15 +147,17 @@ export function JoyaLoadingState({
   className?: string;
 }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn("flex min-h-[40vh] flex-col items-center justify-center gap-3", className)}
+    <View
+      accessibilityRole="progressbar"
+      className={cn(
+        "min-h-[40vh] items-center justify-center gap-3",
+        className,
+      )}
     >
-      <span className="relative grid h-12 w-12 place-items-center rounded-2xl bg-white shadow-joya-sm">
-        <Loader2 className="h-5 w-5 animate-spin text-coral" aria-hidden />
-      </span>
-      <span className="text-[13px] font-medium text-ink-muted">{label}</span>
-    </div>
+      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-joya-sm">
+        <ActivityIndicator color={joyaColors.coral} />
+      </View>
+      <Text className="text-[13px] font-medium text-ink-muted">{label}</Text>
+    </View>
   );
 }

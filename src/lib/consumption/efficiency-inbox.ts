@@ -1,5 +1,6 @@
 import type { InboxNotification } from "@/types/notifications";
 import type { EfficiencyAlert } from "@/lib/consumption/energy-efficiency";
+import { appStorage } from "@/platform/storage";
 
 export const EFFICIENCY_INBOX_PREFIX = "efficiency:";
 
@@ -11,9 +12,8 @@ type InboxState = {
 };
 
 function readState(): InboxState {
-  if (typeof window === "undefined") return { dismissed: [], read: [] };
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = appStorage.getItem(STORAGE_KEY);
     if (!raw) return { dismissed: [], read: [] };
     const parsed = JSON.parse(raw) as Partial<InboxState>;
     return {
@@ -26,8 +26,7 @@ function readState(): InboxState {
 }
 
 function writeState(state: InboxState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  appStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function isEfficiencyInboxId(id: string): boolean {

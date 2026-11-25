@@ -1,39 +1,57 @@
-"use client";
-
 /**
- * Joya chart kit — SVG drawn at the element's real pixel size (no viewBox
- * scaling), so axis text stays legible. Shared by every dashboard chart.
+ * Joya chart kit (React Native) — react-native-svg drawn at the element's real
+ * pixel size (measured with onLayout, no viewBox scaling), so axis text stays
+ * legible. Shared by every dashboard chart.
  *
- * Rules: one y-axis, round ticks, recessive grid, 2.5px lines, 4px rounded bar
- * tops, selective direct labels (peak / now / average), hover crosshair + tooltip.
+ * Rules: one y-axis, round ticks, recessive grid, 2.5px lines, pill bars,
+ * selective direct labels (peak / now / average), tap / scrub crosshair + tooltip.
+ *
+ * Interaction: there is no hover on mobile — a transparent touch layer over the
+ * plot area selects the nearest point / bar on touch start and while dragging.
+ * Tapping the already selected point dismisses the tooltip.
  */
 import {
   useCallback,
-  useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { View, Text, type LayoutChangeEvent, type GestureResponderEvent } from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from "react-native-svg";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { JOYA_CHART } from "@/components/joya/chart-theme";
 import { ChartTooltip } from "./chart-tooltip";
 
 /* ── Utilities ──────────────────────────────────────────────────────── */
 
-/** Measures an element; callback ref so it also works when the node mounts late. */
-export function useElementSize<T extends HTMLElement>() {
-  const [node, setNode] = useState<T | null>(null);
+/**
+ * Measures a view via onLayout. Spread `onLayout` on the View to measure;
+ * `ref` is returned for API compatibility with the web hook and may be unused.
+ */
+export function useElementSize<T = View>() {
+  const ref = useRef<T | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const ref = useCallback((el: T | null) => setNode(el), []);
-  useEffect(() => {
-    if (!node) return;
-    const update = () => setSize({ width: node.clientWidth, height: node.clientHeight });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [node]);
-  return { ref, ...size };
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize((prev) =>
+      Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5
+        ? prev
+        : { width, height },
+    );
+  }, []);
+  return { ref, onLayout, ...size };
 }
 
 /** Round axis ticks (steps of 1, 2, 2.5, 5 × 10ⁿ) covering [0, max]. */
@@ -56,18 +74,18 @@ export function formatAxis(value: number): string {
 }
 
 export function formatValue(value: number, unit: string, digits = 1): string {
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: digits })} ${unit}`;
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: digits })} ${unit}`;
 }
 
-const AXIS_TEXT = {
-  fill: JOYA_CHART.axisText,
-  fontFamily: JOYA_CHART.fontData,
-  fontSize: 11,
-} as const;
+/** Axis text props (no fontFamily: CSS `var()` families are invalid in RN SVG). */
+const AXIS_FONT_SIZE = 11;
+const AXIS_FILL = JOYA_CHART.axisText;
 
 function textWidth(text: string, size = 11): number {
   return text.length * size * 0.62;
 }
+
+const GRID_ZERO = "rgba(23,59,94,0.18)";
 
 /** Small pill label drawn in SVG (peak, now, average). */
 function SvgPill({
@@ -89,26 +107,119 @@ function SvgPill({
   const h = 20;
   const left = anchor === "start" ? x : anchor === "end" ? x - w : x - w / 2;
   return (
-    <g>
-      <rect
+    <G>
+      <Rect
         x={left}
         y={y - h / 2}
         width={w}
         height={h}
         rx={10}
         fill={filled ? tone : "#fff"}
-        stroke={filled ? "none" : tone}
+        stroke={filled ? undefined : tone}
         strokeWidth={filled ? 0 : 1.25}
       />
-      <text
+      <SvgText
         x={left + w / 2}
         y={y + 4}
         textAnchor="middle"
-        style={{ ...AXIS_TEXT, fill: filled ? "#fff" : tone, fontWeight: 600 }}
+        fontSize={AXIS_FONT_SIZE}
+        fontWeight="600"
+        fill={filled ? "#fff" : tone}
       >
         {text}
-      </text>
-    </g>
+      </SvgText>
+    </G>
+  );
+}
+
+/** Horizontal grid lines + y tick labels + unit caption (shared by area & bar). */
+function YGrid({
+  ticks,
+  yAt,
+  left,
+  right,
+  width,
+  unit,
+}: {
+  ticks: number[];
+  yAt: (v: number) => number;
+  left: number;
+  right: number;
+  width: number;
+  unit?: string;
+}) {
+  return (
+    <>
+      {unit ? (
+        <SvgText x={left - 8} y={14} textAnchor="end" fontSize={10.5} fill={AXIS_FILL}>
+          {unit}
+        </SvgText>
+      ) : null}
+      {ticks.map((t) => (
+        <G key={t}>
+          <Line
+            x1={left}
+            x2={width - right}
+            y1={yAt(t)}
+            y2={yAt(t)}
+            stroke={t === 0 ? GRID_ZERO : JOYA_CHART.grid}
+            strokeDasharray={t === 0 ? undefined : "3 4"}
+          />
+          <SvgText x={left - 8} y={yAt(t) + 4} textAnchor="end" fontSize={AXIS_FONT_SIZE} fill={AXIS_FILL}>
+            {formatAxis(t)}
+          </SvgText>
+        </G>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Transparent touch layer over the plot area. Calls `onSelect(x)` with the
+ * touch x relative to the layer; `isStart` is true for the initial touch.
+ */
+function TouchLayer({
+  left,
+  top,
+  width,
+  height,
+  onSelect,
+}: {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  onSelect: (x: number, isStart: boolean) => void;
+}) {
+  return (
+    <View
+      style={{ position: "absolute", left, top, width, height }}
+      onTouchStart={(e: GestureResponderEvent) => onSelect(e.nativeEvent.locationX, true)}
+      onTouchMove={(e: GestureResponderEvent) => onSelect(e.nativeEvent.locationX, false)}
+    />
+  );
+}
+
+/** Hover-equivalent state: tap selects, tapping the same index again clears. */
+function useSelection() {
+  const [selected, setSelected] = useState<number | null>(null);
+  const select = useCallback((index: number | null, isStart: boolean) => {
+    setSelected((prev) => {
+      if (index == null) return null;
+      if (isStart && prev === index) return null;
+      return index;
+    });
+  }, []);
+  return [selected, select] as const;
+}
+
+function ChartEmpty({ message, className }: { message: string; className?: string }) {
+  return (
+    <View className={className ?? "absolute inset-0"}>
+      <View className="h-full min-h-[192px] items-center justify-center rounded-xl border border-dashed border-line-strong bg-cream/60 px-4">
+        <Text className="text-center text-sm text-ink-muted">{message}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -126,8 +237,9 @@ type AreaChartProps = {
   referenceColor?: string;
   secondaryColor?: string;
   unit: string;
+  /** Accessibility label for the chart. */
   ariaLabel: string;
-  /** Index of the live / latest point (pulse + "Maintenant"). */
+  /** Index of the live / latest point ("Maintenant"). */
   liveIndex?: number | null;
   /** Override the live pill text (e.g. dual irradiation values). */
   liveLabel?: (index: number) => string;
@@ -185,11 +297,11 @@ export function JoyaAreaChart({
   emptyMessage,
   className,
 }: AreaChartProps) {
-  const { ref, width, height } = useElementSize<HTMLDivElement>();
+  const { onLayout, width, height } = useElementSize();
   const reactId = useId().replace(/:/g, "");
   const gradientId = `area-${reactId}`;
   const secondaryGradientId = `area-sec-${reactId}`;
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, select] = useSelection();
 
   const known = points
     .map((p, i) => ({ i, v: p.value }))
@@ -218,15 +330,11 @@ export function JoyaAreaChart({
   );
   const yAt = (v: number) => pad.top + innerH - (v / top) * innerH;
 
-  const onMove = (e: React.MouseEvent<SVGRectElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left + pad.left;
+  const onTouch = (localX: number, isStart: boolean) => {
+    const x = localX + pad.left;
     let best = -1;
     let dist = Infinity;
-    const hoverTargets =
-      secondaryKnown.length > 0
-        ? [...known, ...secondaryKnown]
-        : known;
+    const hoverTargets = secondaryKnown.length > 0 ? [...known, ...secondaryKnown] : known;
     for (const p of hoverTargets) {
       const d = Math.abs(xAt(p.i) - x);
       if (d < dist) {
@@ -234,7 +342,7 @@ export function JoyaAreaChart({
         best = p.i;
       }
     }
-    setHover(best >= 0 ? best : null);
+    select(best >= 0 ? best : null, isStart);
   };
 
   const xTicks = useMemo(() => {
@@ -251,13 +359,7 @@ export function JoyaAreaChart({
   }, [points, xTickFilter, xAt, minXTickSpacing]);
 
   if (known.length === 0 && secondaryKnown.length === 0) {
-    return (
-      <div className={className ?? "absolute inset-0 min-h-0"}>
-        <div className="flex h-full min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-line-strong bg-cream/60 px-4 text-center text-sm text-ink-muted">
-          {emptyMessage}
-        </div>
-      </div>
-    );
+    return <ChartEmpty message={emptyMessage} className={className} />;
   }
 
   const linePts = known.map((p) => ({ x: xAt(p.i), y: yAt(p.v) }));
@@ -277,222 +379,186 @@ export function JoyaAreaChart({
     .map((v, i) => (v != null ? { x: xAt(i), y: yAt(v) } : null))
     .filter((p): p is { x: number; y: number } => p != null);
 
-  const peakSeries =
-    peakFromSecondary && secondaryKnown.length > 0 ? secondaryKnown : known;
+  const peakSeries = peakFromSecondary && secondaryKnown.length > 0 ? secondaryKnown : known;
   const peak = peakSeries.reduce((a, b) => (b.v > a.v ? b : a), peakSeries[0]);
-  const tipValueAt = (i: number) =>
-    peakFromSecondary && secondary
-      ? secondary[i]
-      : points[i]?.value;
-  const tip =
-    liveIndex != null && tipValueAt(liveIndex) != null ? liveIndex : null;
+  const tipValueAt = (i: number) => (peakFromSecondary && secondary ? secondary[i] : points[i]?.value);
+  const tip = liveIndex != null && tipValueAt(liveIndex) != null ? liveIndex : null;
   const peakIsTip = tip != null && tip === peak.i;
   const hoverX = hover != null ? xAt(hover) : 0;
-  const hoverValue =
-    hover != null
-      ? tipValueAt(hover) ?? points[hover]?.value
-      : null;
-  const tipYValue =
-    tip != null ? (tipValueAt(tip) as number) : 0;
+  const hoverValue = hover != null ? tipValueAt(hover) ?? points[hover]?.value : null;
+  const tipYValue = tip != null ? (tipValueAt(tip) as number) : 0;
+  const liveColor = peakFromSecondary ? secondaryColor : color;
 
   return (
-    <div className={className ?? "absolute inset-0 min-h-0"}>
-      <div ref={ref} className="relative h-full w-full" onMouseLeave={() => setHover(null)}>
+    <View className={className ?? "absolute inset-0"}>
+      <View
+        className="relative h-full w-full"
+        onLayout={onLayout}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={ariaLabel}
+      >
         {width > 0 && height > 0 ? (
-          <svg width={width} height={height} role="img" aria-label={ariaLabel} className="block">
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                <stop offset="70%" stopColor={color} stopOpacity={0.06} />
-                <stop offset="100%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id={secondaryGradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={secondaryColor} stopOpacity={0.28} />
-                <stop offset="70%" stopColor={secondaryColor} stopOpacity={0.06} />
-                <stop offset="100%" stopColor={secondaryColor} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          <Animated.View entering={FadeIn.duration(450)} style={{ width, height }} pointerEvents="none">
+            <Svg width={width} height={height}>
+              <Defs>
+                <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                  <Stop offset="70%" stopColor={color} stopOpacity={0.06} />
+                  <Stop offset="100%" stopColor={color} stopOpacity={0} />
+                </LinearGradient>
+                <LinearGradient id={secondaryGradientId} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={secondaryColor} stopOpacity={0.28} />
+                  <Stop offset="70%" stopColor={secondaryColor} stopOpacity={0.06} />
+                  <Stop offset="100%" stopColor={secondaryColor} stopOpacity={0} />
+                </LinearGradient>
+              </Defs>
 
-            {/* unit */}
-            <text x={pad.left - 8} y={14} textAnchor="end" style={{ ...AXIS_TEXT, fontSize: 10.5 }}>
-              {unit}
-            </text>
+              <YGrid ticks={ticks} yAt={yAt} left={pad.left} right={pad.right} width={width} unit={unit} />
 
-            {ticks.map((t) => (
-              <g key={t}>
-                <line
-                  x1={pad.left}
-                  x2={width - pad.right}
-                  y1={yAt(t)}
-                  y2={yAt(t)}
-                  stroke={t === 0 ? "rgba(23,59,94,0.18)" : JOYA_CHART.grid}
-                  strokeDasharray={t === 0 ? undefined : "3 4"}
+              {xTicks.map((i) => (
+                <SvgText
+                  key={i}
+                  x={xAt(i)}
+                  y={height - 7}
+                  textAnchor="middle"
+                  fontSize={AXIS_FONT_SIZE}
+                  fill={AXIS_FILL}
+                >
+                  {points[i].label}
+                </SvgText>
+              ))}
+
+              {area ? <Path d={area} fill={`url(#${gradientId})`} /> : null}
+              {secArea ? <Path d={secArea} fill={`url(#${secondaryGradientId})`} /> : null}
+              {refPts.length > 1 ? (
+                <Path
+                  d={linePath(refPts, smooth)}
+                  fill="none"
+                  stroke={referenceColor}
+                  strokeWidth={2}
+                  strokeDasharray="6 5"
+                  strokeLinecap="round"
+                  opacity={0.75}
                 />
-                <text x={pad.left - 8} y={yAt(t) + 4} textAnchor="end" style={AXIS_TEXT}>
-                  {formatAxis(t)}
-                </text>
-              </g>
-            ))}
-
-            {xTicks.map((i) => (
-              <text key={i} x={xAt(i)} y={height - 7} textAnchor="middle" style={AXIS_TEXT}>
-                {points[i].label}
-              </text>
-            ))}
-
-            {area ? (
-              <path key={`a-${n}`} d={area} fill={`url(#${gradientId})`} className="joya-fade-late" />
-            ) : null}
-            {secArea ? (
-              <path
-                key={`a-sec-${n}`}
-                d={secArea}
-                fill={`url(#${secondaryGradientId})`}
-                className="joya-fade-late"
-              />
-            ) : null}
-            {refPts.length > 1 ? (
-              <path
-                d={linePath(refPts, smooth)}
-                fill="none"
-                stroke={referenceColor}
-                strokeWidth={2}
-                strokeDasharray="6 5"
-                strokeLinecap="round"
-                opacity={0.75}
-              />
-            ) : null}
-            {line ? (
-              <path key={`l-${n}`} d={line} pathLength={1} className="joya-draw" fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-            ) : null}
-            {secLine ? (
-              <path
-                key={`l-sec-${n}`}
-                d={secLine}
-                pathLength={1}
-                className="joya-draw"
-                fill="none"
-                stroke={secondaryColor}
-                strokeWidth={2.5}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ) : null}
-
-            {showDots
-              ? known.map((p) => (
-                  <circle
-                    key={p.i}
-                    cx={xAt(p.i)}
-                    cy={yAt(p.v)}
-                    r={p.i === peak.i ? 5 : 3.5}
-                    fill="#fff"
-                    stroke={color}
-                    strokeWidth={2}
-                  />
-                ))
-              : null}
-            {showDots && refPts.length > 0 ? (
-              <circle
-                cx={refPts[refPts.length - 1].x}
-                cy={refPts[refPts.length - 1].y}
-                r={4}
-                fill={referenceColor}
-                stroke="#fff"
-                strokeWidth={2}
-              />
-            ) : null}
-
-            {/* peak annotation */}
-            {showPeak && peak && !peakIsTip && peak.v > 0 ? (
-              <g aria-hidden>
-                {showDots ? null : (
-                  <>
-                    <line x1={xAt(peak.i)} x2={xAt(peak.i)} y1={yAt(peak.v) - 8} y2={yAt(peak.v) - 2} stroke={color} />
-                    <circle cx={xAt(peak.i)} cy={yAt(peak.v)} r={4} fill={color} stroke="#fff" strokeWidth={2} />
-                  </>
-                )}
-                <SvgPill
-                  x={Math.min(Math.max(xAt(peak.i), pad.left + 70), width - pad.right - 70)}
-                  y={Math.max(yAt(peak.v) - 22, 12)}
-                  text={
-                    peakLabel
-                      ? peakLabel(points[peak.i] ?? { label: "", value: peak.v }, peak.i)
-                      : `Pic ${formatValue(peak.v, unit)}`
-                  }
-                  tone={color}
+              ) : null}
+              {line ? (
+                <Path d={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+              ) : null}
+              {secLine ? (
+                <Path
+                  d={secLine}
+                  fill="none"
+                  stroke={secondaryColor}
+                  strokeWidth={2.5}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
                 />
-              </g>
-            ) : null}
+              ) : null}
 
-            {/* live endpoint */}
-            {tip != null ? (
-              <g aria-hidden>
-                <circle cx={xAt(tip)} cy={yAt(tipYValue)} r={10} fill={peakFromSecondary ? secondaryColor : color} opacity={0.2}>
-                  <animate attributeName="r" values="6;13;6" dur="1.8s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.3;0.05;0.3" dur="1.8s" repeatCount="indefinite" />
-                </circle>
-                <circle
-                  cx={xAt(tip)}
-                  cy={yAt(tipYValue)}
-                  r={5}
-                  fill={peakFromSecondary ? secondaryColor : color}
+              {showDots
+                ? known.map((p) => (
+                    <Circle
+                      key={p.i}
+                      cx={xAt(p.i)}
+                      cy={yAt(p.v)}
+                      r={p.i === peak.i ? 5 : 3.5}
+                      fill="#fff"
+                      stroke={color}
+                      strokeWidth={2}
+                    />
+                  ))
+                : null}
+              {showDots && refPts.length > 0 ? (
+                <Circle
+                  cx={refPts[refPts.length - 1].x}
+                  cy={refPts[refPts.length - 1].y}
+                  r={4}
+                  fill={referenceColor}
                   stroke="#fff"
                   strokeWidth={2}
                 />
-                {width >= 420 ? (
-                <SvgPill
-                  x={Math.min(Math.max(xAt(tip), pad.left + 72), width - pad.right - 8)}
-                  y={Math.max(yAt(tipYValue) - 20, 12)}
-                  text={
-                    liveLabel
-                      ? liveLabel(tip)
-                      : `Maintenant ${formatValue(tipYValue, unit)}`
-                  }
-                  tone={JOYA_CHART.navyDark}
-                  filled
-                  anchor="end"
-                />
-                ) : null}
-              </g>
-            ) : null}
+              ) : null}
 
-            {/* hover */}
-            {hover != null && hoverValue != null ? (
-              <g aria-hidden>
-                <line x1={hoverX} x2={hoverX} y1={pad.top} y2={baseline} stroke={JOYA_CHART.navy} strokeOpacity={0.25} />
-                <circle
-                  cx={hoverX}
-                  cy={yAt(hoverValue)}
-                  r={5.5}
-                  fill="#fff"
-                  stroke={peakFromSecondary ? secondaryColor : color}
-                  strokeWidth={2.5}
-                />
-              </g>
-            ) : null}
+              {/* peak annotation */}
+              {showPeak && peak && !peakIsTip && peak.v > 0 ? (
+                <G>
+                  {showDots ? null : (
+                    <>
+                      <Line
+                        x1={xAt(peak.i)}
+                        x2={xAt(peak.i)}
+                        y1={yAt(peak.v) - 8}
+                        y2={yAt(peak.v) - 2}
+                        stroke={color}
+                      />
+                      <Circle cx={xAt(peak.i)} cy={yAt(peak.v)} r={4} fill={color} stroke="#fff" strokeWidth={2} />
+                    </>
+                  )}
+                  <SvgPill
+                    x={Math.min(Math.max(xAt(peak.i), pad.left + 70), width - pad.right - 70)}
+                    y={Math.max(yAt(peak.v) - 22, 12)}
+                    text={
+                      peakLabel
+                        ? peakLabel(points[peak.i] ?? { label: "", value: peak.v }, peak.i)
+                        : `Pic ${formatValue(peak.v, unit)}`
+                    }
+                    tone={color}
+                  />
+                </G>
+              ) : null}
 
-            <rect
-              x={pad.left}
-              y={pad.top}
-              width={innerW}
-              height={innerH}
-              fill="transparent"
-              onMouseMove={onMove}
-              style={{ cursor: "crosshair" }}
-            />
-          </svg>
+              {/* live endpoint (static halo — no SMIL animation in RN) */}
+              {tip != null ? (
+                <G>
+                  <Circle cx={xAt(tip)} cy={yAt(tipYValue)} r={10} fill={liveColor} opacity={0.2} />
+                  <Circle cx={xAt(tip)} cy={yAt(tipYValue)} r={5} fill={liveColor} stroke="#fff" strokeWidth={2} />
+                  {width >= 420 ? (
+                    <SvgPill
+                      x={Math.min(Math.max(xAt(tip), pad.left + 72), width - pad.right - 8)}
+                      y={Math.max(yAt(tipYValue) - 20, 12)}
+                      text={liveLabel ? liveLabel(tip) : `Maintenant ${formatValue(tipYValue, unit)}`}
+                      tone={JOYA_CHART.navyDark}
+                      filled
+                      anchor="end"
+                    />
+                  ) : null}
+                </G>
+              ) : null}
+
+              {/* selection crosshair */}
+              {hover != null && hoverValue != null ? (
+                <G>
+                  <Line
+                    x1={hoverX}
+                    x2={hoverX}
+                    y1={pad.top}
+                    y2={baseline}
+                    stroke={JOYA_CHART.navy}
+                    strokeOpacity={0.25}
+                  />
+                  <Circle cx={hoverX} cy={yAt(hoverValue)} r={5.5} fill="#fff" stroke={liveColor} strokeWidth={2.5} />
+                </G>
+              ) : null}
+            </Svg>
+          </Animated.View>
         ) : null}
+
+        {width > 0 && height > 0 ? (
+          <TouchLayer left={pad.left} top={pad.top} width={innerW} height={innerH} onSelect={onTouch} />
+        ) : null}
+
         <ChartTooltip
           visible={hover != null && hoverValue != null}
           x={hoverX}
           y={hoverValue != null ? yAt(hoverValue) : 0}
+          containerWidth={width}
           placement={hoverValue != null && yAt(hoverValue) < 90 ? "below" : "above"}
         >
           {hover != null ? renderTooltip(hover) : null}
         </ChartTooltip>
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
 
@@ -539,8 +605,8 @@ export function JoyaBarChart({
   renderTooltip,
   className,
 }: BarChartProps) {
-  const { ref, width, height } = useElementSize<HTMLDivElement>();
-  const [hover, setHover] = useState<number | null>(null);
+  const { onLayout, width, height } = useElementSize();
+  const [hover, select] = useSelection();
 
   const values = bars.map((b) => Math.max(0, b.value));
   const filled = values.filter((v, i) => v > 0 && i !== partialIndex);
@@ -563,157 +629,156 @@ export function JoyaBarChart({
 
   const barPath = (i: number, v: number) => pillPath(xCenter(i) - barW / 2, yAt(v), barW, baseline - yAt(v));
 
+  const onTouch = (localX: number, isStart: boolean) => {
+    if (bars.length === 0) return;
+    const i = Math.min(bars.length - 1, Math.max(0, Math.floor(localX / band)));
+    select(i, isStart);
+  };
+
   return (
-    <div className={className ?? "absolute inset-0 min-h-0"}>
-      <div ref={ref} className="relative h-full w-full" onMouseLeave={() => setHover(null)}>
+    <View className={className ?? "absolute inset-0"}>
+      <View
+        className="relative h-full w-full"
+        onLayout={onLayout}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={ariaLabel}
+      >
         {width > 0 && height > 0 ? (
-          <svg width={width} height={height} role="img" aria-label={ariaLabel} className="block">
-            <text x={pad.left - 8} y={14} textAnchor="end" style={{ ...AXIS_TEXT, fontSize: 10.5 }}>
-              {unit}
-            </text>
-            {ticks.map((t) => (
-              <g key={t}>
-                <line
-                  x1={pad.left}
-                  x2={width - pad.right}
-                  y1={yAt(t)}
-                  y2={yAt(t)}
-                  stroke={t === 0 ? "rgba(23,59,94,0.18)" : JOYA_CHART.grid}
-                  strokeDasharray={t === 0 ? undefined : "3 4"}
-                />
-                <text x={pad.left - 8} y={yAt(t) + 4} textAnchor="end" style={AXIS_TEXT}>
-                  {formatAxis(t)}
-                </text>
-              </g>
-            ))}
+          <Animated.View
+            key={bars.length}
+            entering={FadeIn.duration(450)}
+            style={{ width, height }}
+            pointerEvents="none"
+          >
+            <Svg width={width} height={height}>
+              <YGrid ticks={ticks} yAt={yAt} left={pad.left} right={pad.right} width={width} unit={unit} />
 
-            {highlightBand &&
-            highlightBand.toIndex > highlightBand.fromIndex &&
-            highlightBand.fromIndex >= 0 &&
-            highlightBand.toIndex <= bars.length ? (
-              <g aria-hidden>
-                <rect
-                  x={pad.left + band * highlightBand.fromIndex}
-                  y={pad.top}
-                  width={band * (highlightBand.toIndex - highlightBand.fromIndex)}
-                  height={innerH}
-                  rx={18}
-                  fill="#EEEFF2"
-                />
-                {highlightBand.label ? (
-                  <text
-                    x={
-                      pad.left +
-                      band * (highlightBand.fromIndex + highlightBand.toIndex) / 2
-                    }
-                    y={pad.top + 16}
-                    textAnchor="middle"
-                    style={{ ...AXIS_TEXT, fill: JOYA_CHART.axisText, fontSize: 11 }}
-                  >
-                    {highlightBand.label}
-                  </text>
-                ) : null}
-              </g>
-            ) : null}
-
-            {bars.map((b, i) => {
-              const v = values[i];
-              const dim = hover != null && hover !== i;
-              const isPartial = i === partialIndex;
-              return (
-                <g key={`${b.label}-${i}`}>
-                  {v > 0 ? (
-                    <path
-                      d={barPath(i, v)}
-                      fill={b.color ?? color}
-                      opacity={dim ? 0.35 : isPartial ? 0.45 : 1}
-                      className="joya-grow"
-                      style={{ transition: "opacity 150ms", animationDelay: `${Math.min(i, 30) * 25}ms` }}
-                    />
-                  ) : null}
-                  {(xTickFilter ? xTickFilter(b.label, i) : true) && i % labelEvery === 0 ? (
-                    <text
-                      x={xCenter(i)}
-                      y={height - 7}
-                      textAnchor="middle"
-                      style={{ ...AXIS_TEXT, fill: hover === i ? JOYA_CHART.navy : AXIS_TEXT.fill, fontWeight: hover === i ? 600 : 400 }}
-                    >
-                      {b.label}
-                    </text>
-                  ) : null}
-                  <rect
-                    x={pad.left + band * i}
+              {highlightBand &&
+              highlightBand.toIndex > highlightBand.fromIndex &&
+              highlightBand.fromIndex >= 0 &&
+              highlightBand.toIndex <= bars.length ? (
+                <G>
+                  <Rect
+                    x={pad.left + band * highlightBand.fromIndex}
                     y={pad.top}
-                    width={band}
+                    width={band * (highlightBand.toIndex - highlightBand.fromIndex)}
                     height={innerH}
-                    fill="transparent"
-                    onMouseEnter={() => setHover(i)}
-                    style={{ cursor: "pointer" }}
+                    rx={18}
+                    fill="#EEEFF2"
                   />
-                </g>
-              );
-            })}
+                  {highlightBand.label ? (
+                    <SvgText
+                      x={pad.left + (band * (highlightBand.fromIndex + highlightBand.toIndex)) / 2}
+                      y={pad.top + 16}
+                      textAnchor="middle"
+                      fontSize={11}
+                      fill={AXIS_FILL}
+                    >
+                      {highlightBand.label}
+                    </SvgText>
+                  ) : null}
+                </G>
+              ) : null}
 
-            {/* best bar direct label */}
-            {bestLabel && values[best] > 0 && hover == null && width >= 420 ? (
-              <g aria-hidden pointerEvents="none">
+              {bars.map((b, i) => {
+                const v = values[i];
+                const dim = hover != null && hover !== i;
+                const isPartial = i === partialIndex;
+                return (
+                  <G key={`${b.label}-${i}`}>
+                    {v > 0 ? (
+                      <Path
+                        d={barPath(i, v)}
+                        fill={b.color ?? color}
+                        opacity={dim ? 0.35 : isPartial ? 0.45 : 1}
+                      />
+                    ) : null}
+                    {(xTickFilter ? xTickFilter(b.label, i) : true) && i % labelEvery === 0 ? (
+                      <SvgText
+                        x={xCenter(i)}
+                        y={height - 7}
+                        textAnchor="middle"
+                        fontSize={AXIS_FONT_SIZE}
+                        fontWeight={hover === i ? "600" : "400"}
+                        fill={hover === i ? JOYA_CHART.navy : AXIS_FILL}
+                      >
+                        {b.label}
+                      </SvgText>
+                    ) : null}
+                  </G>
+                );
+              })}
+
+              {/* best bar direct label */}
+              {bestLabel && values[best] > 0 && hover == null && width >= 420 ? (
                 <SvgPill
                   x={Math.min(Math.max(xCenter(best), pad.left + 60), width - pad.right - 60)}
                   y={Math.max(yAt(values[best]) - 16, 12)}
                   text={`${bestLabel} ${formatValue(values[best], unit, 0)}`}
                   tone={color}
                 />
-              </g>
-            ) : null}
+              ) : null}
 
-            {showAverage && average > 0 ? (
-              <g aria-hidden pointerEvents="none">
-                <line
-                  x1={pad.left}
-                  x2={width - pad.right}
-                  y1={yAt(average)}
-                  y2={yAt(average)}
-                  stroke={JOYA_CHART.navy}
-                  strokeWidth={1.5}
-                  strokeDasharray="6 5"
-                  opacity={0.7}
-                />
-                <SvgPill
-                  x={width - pad.right}
-                  y={yAt(average) - 13}
-                  text={`Moy. ${formatValue(average, unit, 0)}`}
-                  tone={JOYA_CHART.navy}
-                  filled
-                  anchor="end"
-                />
-              </g>
-            ) : null}
-          </svg>
+              {showAverage && average > 0 ? (
+                <G>
+                  <Line
+                    x1={pad.left}
+                    x2={width - pad.right}
+                    y1={yAt(average)}
+                    y2={yAt(average)}
+                    stroke={JOYA_CHART.navy}
+                    strokeWidth={1.5}
+                    strokeDasharray="6 5"
+                    opacity={0.7}
+                  />
+                  <SvgPill
+                    x={width - pad.right}
+                    y={yAt(average) - 13}
+                    text={`Moy. ${formatValue(average, unit, 0)}`}
+                    tone={JOYA_CHART.navy}
+                    filled
+                    anchor="end"
+                  />
+                </G>
+              ) : null}
+            </Svg>
+          </Animated.View>
         ) : null}
+
+        {width > 0 && height > 0 ? (
+          <TouchLayer left={pad.left} top={pad.top} width={innerW} height={innerH} onSelect={onTouch} />
+        ) : null}
+
         <ChartTooltip
           visible={hover != null}
           x={hover != null ? xCenter(hover) : 0}
-          y={hover != null ? yAt(values[hover]) : 0}
-          placement={hover != null && yAt(values[hover]) < 90 ? "below" : "above"}
+          y={hover != null ? yAt(values[hover] ?? 0) : 0}
+          containerWidth={width}
+          placement={hover != null && yAt(values[hover] ?? 0) < 90 ? "below" : "above"}
         >
           {hover != null ? renderTooltip(hover) : null}
         </ChartTooltip>
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
 
 /** Shared tooltip header + rows. */
 export function TooltipTitle({ children }: { children: ReactNode }) {
-  return <p className="font-data text-[11px] uppercase tracking-[0.06em] text-slate-500">{children}</p>;
+  return (
+    <Text className="font-data text-[11px] uppercase tracking-[0.06em] text-slate-500">{children}</Text>
+  );
 }
 
 export function TooltipValue({ color, children }: { color: string; children: ReactNode }) {
   return (
-    <p className="mt-1 flex items-center gap-2 font-display text-base font-bold tabular-nums text-navy">
-      <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: color }} aria-hidden />
-      {children}
-    </p>
+    <View className="mt-1 flex-row items-center gap-2">
+      <View className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: color }} />
+      <Text className="font-display text-base font-bold text-navy" style={{ fontVariant: ["tabular-nums"] }}>
+        {children}
+      </Text>
+    </View>
   );
 }
 
@@ -733,13 +798,13 @@ type GroupedBarChartProps = {
 export function JoyaGroupedBarChart({
   labels,
   series,
-  unit,
+  unit: _unit,
   ariaLabel,
   renderTooltip,
   className,
 }: GroupedBarChartProps) {
-  const { ref, width, height } = useElementSize<HTMLDivElement>();
-  const [hover, setHover] = useState<number | null>(null);
+  const { onLayout, width, height } = useElementSize();
+  const [hover, select] = useSelection();
   const all = series.flatMap((s) => s.values);
   const ticks = niceTicks(Math.max(0, ...all) * 1.08);
   const top = ticks[ticks.length - 1] || 1;
@@ -755,74 +820,106 @@ export function JoyaGroupedBarChart({
   const baseline = pad.top + innerH;
   const labelEvery = Math.max(1, Math.ceil(32 / band));
 
+  const hoverTopY =
+    hover != null ? yAt(Math.max(0, ...series.map((s) => s.values[hover] ?? 0))) : 0;
+
+  const onTouch = (localX: number, isStart: boolean) => {
+    if (labels.length === 0) return;
+    const i = Math.min(labels.length - 1, Math.max(0, Math.floor(localX / band)));
+    select(i, isStart);
+  };
+
   return (
-    <div className={className ?? "absolute inset-0 min-h-0"}>
-      <div ref={ref} className="relative h-full w-full" onMouseLeave={() => setHover(null)}>
+    <View className={className ?? "absolute inset-0"}>
+      <View
+        className="relative h-full w-full"
+        onLayout={onLayout}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={ariaLabel}
+      >
         {width > 0 && height > 0 ? (
-          <svg width={width} height={height} role="img" aria-label={ariaLabel} className="block">
-            {ticks.map((t) => (
-              <g key={t}>
-                <line x1={pad.left} x2={width - pad.right} y1={yAt(t)} y2={yAt(t)} stroke={t === 0 ? "rgba(23,59,94,0.14)" : "rgba(23,59,94,0.06)"} />
-                <text x={pad.left - 12} y={yAt(t) + 4} textAnchor="end" style={{ ...AXIS_TEXT, fontFamily: JOYA_CHART.fontBody, fontSize: 12 }}>
-                  {formatAxis(t)}
-                </text>
-              </g>
-            ))}
-            {labels.map((label, i) => {
-              const x0 = pad.left + band * i + (band - groupW) / 2;
-              const dim = hover != null && hover !== i;
-              return (
-                <g key={`${label}-${i}`}>
-                  {hover === i ? (
-                    <rect x={pad.left + band * i + 2} y={pad.top} width={band - 4} height={innerH} rx={12} fill="rgba(23,59,94,0.04)" />
-                  ) : null}
-                  {series.map((s, si) => {
-                    const v = Math.max(0, s.values[i] ?? 0);
-                    if (v <= 0) return null;
-                    return (
-                      <path
-                        key={s.key}
-                        d={pillPath(x0 + si * (barW + gap), yAt(v), barW, baseline - yAt(v))}
-                        fill={s.color}
-                        opacity={dim ? 0.35 : 1}
-                        className="joya-grow"
-                        style={{ transition: "opacity 150ms", animationDelay: `${Math.min(i, 31) * 45 + si * 90}ms` }}
-                      />
-                    );
-                  })}
-                  {i % labelEvery === 0 ? (
-                    <text
-                      x={pad.left + band * i + band / 2}
-                      y={height - 8}
-                      textAnchor="middle"
-                      style={{ ...AXIS_TEXT, fontFamily: JOYA_CHART.fontBody, fontSize: 12.5, fill: hover === i ? JOYA_CHART.navy : AXIS_TEXT.fill, fontWeight: hover === i ? 600 : 400 }}
-                    >
-                      {label}
-                    </text>
-                  ) : null}
-                  <rect
-                    x={pad.left + band * i}
-                    y={pad.top}
-                    width={band}
-                    height={innerH}
-                    fill="transparent"
-                    onMouseEnter={() => setHover(i)}
-                    style={{ cursor: "pointer" }}
+          <Animated.View
+            key={labels.length}
+            entering={FadeIn.duration(450)}
+            style={{ width, height }}
+            pointerEvents="none"
+          >
+            <Svg width={width} height={height}>
+              {ticks.map((t) => (
+                <G key={t}>
+                  <Line
+                    x1={pad.left}
+                    x2={width - pad.right}
+                    y1={yAt(t)}
+                    y2={yAt(t)}
+                    stroke={t === 0 ? "rgba(23,59,94,0.14)" : "rgba(23,59,94,0.06)"}
                   />
-                </g>
-              );
-            })}
-          </svg>
+                  <SvgText x={pad.left - 12} y={yAt(t) + 4} textAnchor="end" fontSize={12} fill={AXIS_FILL}>
+                    {formatAxis(t)}
+                  </SvgText>
+                </G>
+              ))}
+              {labels.map((label, i) => {
+                const x0 = pad.left + band * i + (band - groupW) / 2;
+                const dim = hover != null && hover !== i;
+                return (
+                  <G key={`${label}-${i}`}>
+                    {hover === i ? (
+                      <Rect
+                        x={pad.left + band * i + 2}
+                        y={pad.top}
+                        width={Math.max(0, band - 4)}
+                        height={innerH}
+                        rx={12}
+                        fill="rgba(23,59,94,0.04)"
+                      />
+                    ) : null}
+                    {series.map((s, si) => {
+                      const v = Math.max(0, s.values[i] ?? 0);
+                      if (v <= 0) return null;
+                      return (
+                        <Path
+                          key={s.key}
+                          d={pillPath(x0 + si * (barW + gap), yAt(v), barW, baseline - yAt(v))}
+                          fill={s.color}
+                          opacity={dim ? 0.35 : 1}
+                        />
+                      );
+                    })}
+                    {i % labelEvery === 0 ? (
+                      <SvgText
+                        x={pad.left + band * i + band / 2}
+                        y={height - 8}
+                        textAnchor="middle"
+                        fontSize={12.5}
+                        fontWeight={hover === i ? "600" : "400"}
+                        fill={hover === i ? JOYA_CHART.navy : AXIS_FILL}
+                      >
+                        {label}
+                      </SvgText>
+                    ) : null}
+                  </G>
+                );
+              })}
+            </Svg>
+          </Animated.View>
         ) : null}
+
+        {width > 0 && height > 0 ? (
+          <TouchLayer left={pad.left} top={pad.top} width={innerW} height={innerH} onSelect={onTouch} />
+        ) : null}
+
         <ChartTooltip
           visible={hover != null}
           x={hover != null ? pad.left + band * hover + band / 2 : 0}
-          y={hover != null ? yAt(Math.max(0, ...series.map((s) => s.values[hover] ?? 0))) : 0}
-          placement={hover != null && yAt(Math.max(0, ...series.map((s) => s.values[hover] ?? 0))) < 90 ? "below" : "above"}
+          y={hoverTopY}
+          containerWidth={width}
+          placement={hover != null && hoverTopY < 90 ? "below" : "above"}
         >
           {hover != null ? renderTooltip(hover) : null}
         </ChartTooltip>
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }

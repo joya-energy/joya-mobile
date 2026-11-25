@@ -1,6 +1,5 @@
-"use client";
-
 import { useMemo } from "react";
+import { View } from "react-native";
 import { translateUserMessage } from "@/lib/user-messages";
 import type { ClientDashboardData } from "@/types/dashboard";
 import { useClientDashboard } from "@/hooks/use-client-dashboard";
@@ -167,28 +166,31 @@ export function ClientDashboard({
   }
 
   return (
-    <div className="joya-stagger relative flex w-full flex-col gap-5 pb-6 lg:gap-6">
+    <View className="relative w-full flex-col gap-4 pb-6">
       <DeviceScopeLoadingOverlay />
+      {/* Hero edge-to-edge; cards keep a thin 12px gutter only */}
       <DashboardHero site={data.site} dailySavingsValue={dailySavingsValue} />
-      <DashboardEnergyFlowCard
-        site={data.site}
-        onboardingLocationQuery={onboardingLocationQuery}
-        lastUpdatedLabel={energyFlowUpdatedLabel}
-        metrics={energyFlowMetrics}
-        onRefresh={useHook ? () => refetch() : undefined}
-        isRefreshing={isRefreshing}
-        enodeSync={useHook ? fetchEnodeSync : data.enodeSync}
-      />
-      <EnergyOverviewCard energyByYear={data.energyByYear} companyId={companyId} />
-      <DashboardPerformanceSection
-        data={data}
-        companyId={companyId}
-      />
-      {showEscoContract ? (
-        <EscoContractCard contract={data.escoContract} alerts={data.alerts} />
-      ) : (
-        <DashboardAlertsKpiCard alerts={data.alerts} />
-      )}
-    </div>
+      <View className="gap-4 px-3">
+        <DashboardEnergyFlowCard
+          site={data.site}
+          onboardingLocationQuery={onboardingLocationQuery}
+          lastUpdatedLabel={energyFlowUpdatedLabel}
+          metrics={energyFlowMetrics}
+          onRefresh={useHook ? () => refetch() : undefined}
+          isRefreshing={isRefreshing}
+          enodeSync={useHook ? fetchEnodeSync : data.enodeSync}
+        />
+        <EnergyOverviewCard
+          energyByYear={data.energyByYear}
+          companyId={companyId}
+        />
+        <DashboardPerformanceSection data={data} companyId={companyId} />
+        {showEscoContract ? (
+          <EscoContractCard contract={data.escoContract} alerts={data.alerts} />
+        ) : (
+          <DashboardAlertsKpiCard alerts={data.alerts} />
+        )}
+      </View>
+    </View>
   );
 }

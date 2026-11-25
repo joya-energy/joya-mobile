@@ -1,29 +1,8 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   consumptionApi,
@@ -33,8 +12,8 @@ import {
   type EdgeMetricPoint,
 } from "@/lib/consumption/api";
 import {
-  AveragePillLabel,
   EDGE_CHART_COLORS,
+  ChartEmptyBox,
   StatBox,
   fmtMetric,
   mean,
@@ -43,13 +22,20 @@ import {
   type ViewMode,
 } from "@/components/client/consumption/edge-consumption-charts";
 import { mapDayMetricSeries, hourlyEnergyRows } from "@/lib/consumption/hourly-energy";
-import { JOYA_CHART, JOYA_RECHARTS } from "@/components/joya/chart-theme";
-import { formatAxis } from "@/components/client/dashboard/chart-kit";
+import {
+  JoyaAreaChart,
+  TooltipTitle,
+  TooltipValue,
+} from "@/components/client/dashboard/chart-kit";
+import { PillSelect } from "@/components/client/onboarding-info/pill-select";
+import { DatePill } from "@/components/client/consumption/date-pill";
+import { JoyaMultiLineChart } from "@/components/client/consumption/multi-line-chart";
+import { joyaColors } from "@/theme/colors";
 
 type Period = "day" | "week" | "month" | "year" | "total" | "custom";
 type HistParam = "active" | "voltage" | "current" | "energy";
 
-const PERIODS: Array<{ id: Period; label: string }> = [
+const PERIODS: { id: Period; label: string }[] = [
   { id: "day", label: "Jour" },
   { id: "week", label: "Semaine" },
   { id: "month", label: "Mois" },
@@ -58,7 +44,7 @@ const PERIODS: Array<{ id: Period; label: string }> = [
   { id: "custom", label: "Personnalisé" },
 ];
 
-const PARAMS: Array<{ id: HistParam; label: string }> = [
+const PARAMS: { id: HistParam; label: string }[] = [
   { id: "active", label: "Puissance active (kW)" },
   { id: "voltage", label: "Tension (V)" },
   { id: "current", label: "Courant (A)" },
@@ -157,6 +143,10 @@ function formatHeading(from: string, to: string, period: Period): string {
     year: "numeric",
   });
   return `${a} – ${b}`;
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function resolveRange(
@@ -392,6 +382,14 @@ function mergeRows(rows: SeriesRow[], label: string, t: string): SeriesRow {
   };
 }
 
+function FilterLabel({ children }: { children: string }) {
+  return (
+    <Text className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
+      {children}
+    </Text>
+  );
+}
+
 type ConsumptionHistorySectionProps = {
   deviceId: string | null;
   trackingSince?: string | null;
@@ -432,9 +430,12 @@ export function ConsumptionHistorySection({
   const cfg = paramConfig(param);
   const effView = !useEnergySeries && cfg.hasPhase ? view : "gen";
 
-  useEffect(() => {
+  // Keep the draft date in sync when the cursor moves (prev / next arrows).
+  const [prevCursor, setPrevCursor] = useState(cursor);
+  if (prevCursor !== cursor) {
+    setPrevCursor(cursor);
     setDraftDate(cursor);
-  }, [cursor]);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -598,212 +599,223 @@ export function ConsumptionHistorySection({
     setReloadTick((n) => n + 1);
   };
 
-  const heading = formatHeading(range.from, range.to, period);
-  const chartTooltip = JOYA_RECHARTS.tooltip;
+  const heading = capitalize(formatHeading(range.from, range.to, period));
+
+  const statItems =
+    period === "day"
+      ? param === "energy"
+        ? [
+            { label: "Total", value: fmtMetric(values.length ? total : null, decimals, unit) },
+            { label: "Moyenne", value: fmtMetric(avg, decimals, unit) },
+            { label: "Maximum", value: fmtMetric(max, decimals, unit) },
+          ]
+        : [
+            {
+              label: "Moyenne du jour",
+              value: fmtMetric(avg, decimals, unit),
+            },
+            {
+              label: "Maximum",
+              value: fmtMetric(max, decimals, unit),
+            },
+            {
+              label: "Minimum",
+              value: fmtMetric(min, decimals, unit),
+            },
+          ]
+      : [
+          {
+            label: param === "energy" ? "Total" : "Moyenne",
+            value: fmtMetric(
+              param === "energy" ? (values.length ? total : null) : avg,
+              decimals,
+              unit,
+            ),
+          },
+          { label: "Maximum", value: fmtMetric(max, decimals, unit) },
+          {
+            label: param === "energy" ? "Moyenne" : "Minimum",
+            value: fmtMetric(param === "energy" ? avg : min, decimals, unit),
+          },
+        ];
 
   return (
-    <section className="rounded-[22px] border border-line bg-white p-4 shadow-joya-sm sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="font-display text-[1.15rem] font-bold tracking-tight text-navy">
+    <Card className="rounded-[22px] border-line bg-white p-4 shadow-joya-sm">
+      <View className="gap-3">
+        <View>
+          <Text className="font-display text-[18px] font-bold tracking-tight text-navy">
             Historique
-          </h2>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
+          </Text>
+          <Text className="mt-0.5 text-[13px] text-ink-muted">
             Consulter n&apos;importe quel jour, une période, ou depuis
             l&apos;installation
-          </p>
-        </div>
+          </Text>
+        </View>
         {canNavigate ? (
-          <div className="flex items-center gap-1 self-end text-sm font-medium text-slate-700">
-            <button
-              type="button"
-              className="rounded-md p-1 hover:bg-slate-100"
-              onClick={goPrev}
-              aria-label="Période précédente"
+          <View className="flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Période précédente"
+              hitSlop={8}
+              onPress={goPrev}
+              className="rounded-md p-1.5 active:bg-slate-100"
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[10rem] text-center capitalize">{heading}</span>
-            <button
-              type="button"
-              className="rounded-md p-1 hover:bg-slate-100 disabled:opacity-30"
-              onClick={goNext}
+              <ChevronLeft size={18} color={joyaColors.navy} />
+            </Pressable>
+            <Text
+              numberOfLines={1}
+              className="min-w-0 flex-1 text-center text-sm font-medium text-slate-700"
+            >
+              {heading}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Période suivante"
+              accessibilityState={{ disabled: atMaxCursor }}
+              hitSlop={8}
               disabled={atMaxCursor}
-              aria-label="Période suivante"
+              onPress={goNext}
+              className={cn(
+                "rounded-md p-1.5 active:bg-slate-100",
+                atMaxCursor && "opacity-30",
+              )}
             >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+              <ChevronRight size={18} color={joyaColors.navy} />
+            </Pressable>
+          </View>
         ) : (
-          <p className="self-end text-sm font-medium capitalize text-slate-700">
-            {heading}
-          </p>
+          <Text className="text-sm font-medium text-slate-700">{heading}</Text>
         )}
-      </div>
+      </View>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
+      <View className="mt-4 flex-row flex-wrap gap-1.5">
         {PERIODS.map((p) => (
-          <button
+          <Pressable
             key={p.id}
-            type="button"
-            onClick={() => setPeriod(p.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: period === p.id }}
+            onPress={() => setPeriod(p.id)}
             className={cn(
-              "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
-              period === p.id
-                ? "bg-navy text-white shadow-joya-xs"
-                : "bg-transparent text-slate-500 hover:bg-cream hover:text-navy",
+              "rounded-full px-3.5 py-1.5",
+              period === p.id ? "bg-navy shadow-joya-xs" : "bg-transparent",
             )}
           >
-            {p.label}
-          </button>
+            <Text
+              className={cn(
+                "text-xs font-semibold",
+                period === p.id ? "text-white" : "text-slate-500",
+              )}
+            >
+              {p.label}
+            </Text>
+          </Pressable>
         ))}
-      </div>
+      </View>
 
-      <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-[0_10px_40px_rgba(15,23,42,0.05)]">
-        <div className="flex min-w-[12rem] flex-col gap-1.5">
-          <span className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
-            Paramètre
-          </span>
-          <Select
+      <View className="mt-4 gap-4 rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-joya-sm">
+        <View className="gap-1.5">
+          <FilterLabel>Paramètre</FilterLabel>
+          <PillSelect
+            label="Paramètre"
+            className="h-10 self-start border-slate-200 px-4"
             value={draftParam}
-            onValueChange={(v) => setDraftParam(v as HistParam)}
-          >
-            <SelectTrigger className="h-10 w-[220px] rounded-full border-slate-200 bg-white px-4 text-sm font-medium shadow-none">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PARAMS.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            options={PARAMS.map((item) => ({
+              value: item.id,
+              label: item.label,
+            }))}
+            onChange={(v) => setDraftParam(v as HistParam)}
+          />
+        </View>
 
         {draftParam !== "energy" ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
-              Vue
-            </span>
-            <div className="flex items-center gap-1.5">
+          <View className="gap-1.5">
+            <FilterLabel>Vue</FilterLabel>
+            <View className="flex-row items-center gap-1.5">
               {(
                 [
                   ["gen", "Général"],
                   ["phase", "Par phase"],
                 ] as const
               ).map(([id, label]) => (
-                <button
+                <Pressable
                   key={id}
-                  type="button"
-                  onClick={() => setView(id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: view === id }}
+                  onPress={() => setView(id)}
                   className={cn(
-                    "h-10 rounded-full px-4 text-sm font-semibold transition-colors",
-                    view === id
-                      ? "bg-navy text-white"
-                      : "border border-line bg-white text-slate-600 hover:border-line-strong",
+                    "h-10 items-center justify-center rounded-full px-4",
+                    view === id ? "bg-navy" : "border border-line bg-white",
                   )}
                 >
-                  {label}
-                </button>
+                  <Text
+                    className={cn(
+                      "text-sm font-semibold",
+                      view === id ? "text-white" : "text-slate-600",
+                    )}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
               ))}
-            </div>
-          </div>
+            </View>
+          </View>
         ) : null}
 
-        <div className="flex flex-col gap-1.5">
-          <span className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
-            Date
-          </span>
-          <label className="flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5">
-            <CalendarDays className="h-4 w-4 text-slate-400" aria-hidden />
-            <input
-              type="date"
-              value={draftDate}
-              max={today}
-              onChange={(e) => setDraftDate(e.target.value)}
-              className="border-0 bg-transparent text-sm font-medium text-slate-800 outline-none"
-            />
-          </label>
-        </div>
+        <View className="gap-1.5">
+          <FilterLabel>Date</FilterLabel>
+          <DatePill
+            label="Date"
+            value={draftDate}
+            max={today}
+            onChange={setDraftDate}
+            className="border-slate-200"
+          />
+        </View>
 
-        <button
-          type="button"
-          onClick={applyFilters}
+        <Pressable
+          accessibilityRole="button"
+          onPress={applyFilters}
           disabled={loading}
-          className="h-10 rounded-pill bg-coral px-6 text-sm font-semibold text-white shadow-joya-xs transition-[background-color,box-shadow,transform] hover:-translate-y-px hover:bg-coral-dark hover:shadow-joya-coral disabled:opacity-60"
+          className={cn(
+            "h-10 items-center justify-center self-start rounded-full bg-coral px-6 shadow-joya-xs active:bg-coral-dark",
+            loading && "opacity-60",
+          )}
         >
-          Afficher
-        </button>
-      </div>
+          <Text className="text-sm font-semibold text-white">Afficher</Text>
+        </Pressable>
+      </View>
 
       {period === "custom" ? (
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-slate-500">
+        <View className="mt-3 flex-row flex-wrap items-end gap-3">
+          <View className="gap-1">
+            <Text className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
               Du
-            </Label>
-            <input
-              type="date"
+            </Text>
+            <DatePill
+              label="Du"
               value={customFrom}
               max={today}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 px-2.5 text-xs"
+              onChange={setCustomFrom}
+              className="border-slate-200"
             />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-slate-500">
+          </View>
+          <View className="gap-1">
+            <Text className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
               Au
-            </Label>
-            <input
-              type="date"
+            </Text>
+            <DatePill
+              label="Au"
               value={customTo}
               max={today}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 px-2.5 text-xs"
+              onChange={setCustomTo}
+              className="border-slate-200"
             />
-          </div>
-        </div>
+          </View>
+        </View>
       ) : null}
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {(period === "day"
-          ? param === "energy"
-            ? [
-                { label: "Total", value: fmtMetric(values.length ? total : null, decimals, unit) },
-                { label: "Moyenne", value: fmtMetric(avg, decimals, unit) },
-                { label: "Maximum", value: fmtMetric(max, decimals, unit) },
-              ]
-            : [
-                {
-                  label: "Moyenne du jour",
-                  value: fmtMetric(avg, decimals, unit),
-                },
-                {
-                  label: "Maximum",
-                  value: fmtMetric(max, decimals, unit),
-                },
-                {
-                  label: "Minimum",
-                  value: fmtMetric(min, decimals, unit),
-                },
-              ]
-          : [
-              {
-                label: param === "energy" ? "Total" : "Moyenne",
-                value: fmtMetric(
-                  param === "energy" ? (values.length ? total : null) : avg,
-                  decimals,
-                  unit,
-                ),
-              },
-              { label: "Maximum", value: fmtMetric(max, decimals, unit) },
-              {
-                label: param === "energy" ? "Moyenne" : "Minimum",
-                value: fmtMetric(param === "energy" ? avg : min, decimals, unit),
-              },
-            ]
-        ).map((stat, index) => (
+      <View className="mt-4 flex-row flex-wrap gap-2">
+        {statItems.map((stat, index) => (
           <StatBox
             key={stat.label}
             tone={index === 0 ? "accent" : "muted"}
@@ -811,113 +823,71 @@ export function ConsumptionHistorySection({
             value={stat.value}
           />
         ))}
-      </div>
+      </View>
 
-      <div className="mt-4 h-64 w-full">
+      <View
+        key={`${period}-${param}-${range.from}-${range.to}-${effView}`}
+        className="relative mt-4 h-64 w-full"
+      >
         {loading ? (
-          <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Chargement de l&apos;historique…
-          </div>
+          <View className="h-full flex-row items-center justify-center gap-2">
+            <ActivityIndicator size="small" color={joyaColors.coral} />
+            <Text className="text-sm text-slate-500">
+              Chargement de l&apos;historique…
+            </Text>
+          </View>
         ) : error ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-slate-500">
-            <p>{error}</p>
+          <View className="h-full items-center justify-center gap-2">
+            <Text className="text-sm text-slate-500">{error}</Text>
             <Button
-              type="button"
               variant="outline"
               size="sm"
-              onClick={() => setReloadTick((n) => n + 1)}
+              onPress={() => setReloadTick((n) => n + 1)}
             >
               Réessayer
             </Button>
-          </div>
+          </View>
         ) : !hasData ? (
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-line-strong bg-cream/60 text-sm text-ink-muted">
-            Aucune donnée sur cette période
-          </div>
+          <ChartEmptyBox
+            className="h-full"
+            message="Aucune donnée sur cette période"
+          />
+        ) : effView === "phase" ? (
+          <JoyaMultiLineChart
+            rows={rows}
+            series={[
+              { key: "l1", label: "L1", color: EDGE_CHART_COLORS.l1 },
+              { key: "l2", label: "L2", color: EDGE_CHART_COLORS.l2 },
+              { key: "l3", label: "L3", color: EDGE_CHART_COLORS.l3 },
+            ]}
+            ariaLabel={`${title} par phase, ${unit}`}
+            minXTickSpacing={hourAxis ? 56 : 64}
+            formatTooltipValue={(v) => fmtMetric(v, decimals, unit)}
+          />
         ) : (
-          <ResponsiveContainer
-            key={`${period}-${param}-${range.from}-${range.to}-${effView}`}
-            width="100%"
-            height="100%"
-          >
-            {effView === "phase" ? (
-              <LineChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid {...JOYA_RECHARTS.grid} />
-                <XAxis
-                  dataKey="label"
-                  tick={JOYA_RECHARTS.tick}
-                  axisLine={JOYA_RECHARTS.axisLine}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={hourAxis ? 24 : 44}
-                />
-                <YAxis tick={JOYA_RECHARTS.tick} width={46} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatAxis(v)} />
-                <Tooltip
-                  formatter={(v: number) => [fmtMetric(v, decimals, unit), title]}
-                  contentStyle={chartTooltip}
-                  cursor={{ stroke: JOYA_CHART.navy, strokeOpacity: 0.25 }}
-                />
-                <Legend />
-                <Line type="monotone" dataKey="l1" name="L1" stroke={EDGE_CHART_COLORS.l1} strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="l2" name="L2" stroke={EDGE_CHART_COLORS.l2} strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="l3" name="L3" stroke={EDGE_CHART_COLORS.l3} strokeWidth={2} dot={false} connectNulls />
-              </LineChart>
-            ) : (
-              <AreaChart data={rows} margin={{ top: 28, right: 12, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="history-area" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={EDGE_CHART_COLORS.gen} stopOpacity={0.28} />
-                    <stop offset="100%" stopColor={EDGE_CHART_COLORS.gen} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid {...JOYA_RECHARTS.grid} />
-                <XAxis
-                  dataKey="label"
-                  tick={JOYA_RECHARTS.tick}
-                  axisLine={JOYA_RECHARTS.axisLine}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={hourAxis ? 24 : 44}
-                />
-                <YAxis tick={JOYA_RECHARTS.tick} width={46} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatAxis(v)} />
-                <Tooltip
-                  formatter={(v: number) => [fmtMetric(v, decimals, unit), title]}
-                  contentStyle={chartTooltip}
-                  cursor={{ stroke: JOYA_CHART.navy, strokeOpacity: 0.25 }}
-                />
-                {avg != null ? (
-                  <ReferenceLine
-                    y={avg}
-                    stroke={JOYA_CHART.navy}
-                    strokeOpacity={0.4}
-                    strokeDasharray="5 6"
-                    label={
-                      <AveragePillLabel
-                        value={`Moy. ${fmtMetric(avg, decimals, unit)}`}
-                      />
-                    }
-                  />
-                ) : null}
-                <Area
-                  type="monotone"
-                  dataKey="gen"
-                  name={title}
-                  stroke={EDGE_CHART_COLORS.gen}
-                  fill="url(#history-area)"
-                  strokeWidth={2.35}
-                  dot={false}
-                  activeDot={{ r: 5, fill: "#fff", stroke: EDGE_CHART_COLORS.gen, strokeWidth: 2.5 }}
-                  connectNulls
-                />
-              </AreaChart>
+          <JoyaAreaChart
+            points={rows.map((r) => ({ label: r.label, value: r.gen }))}
+            reference={avg != null ? rows.map(() => avg) : undefined}
+            color={EDGE_CHART_COLORS.gen}
+            unit={unit}
+            ariaLabel={`${title}, ${unit}`}
+            showPeak={false}
+            minXTickSpacing={hourAxis ? 56 : 64}
+            emptyMessage="Aucune donnée sur cette période"
+            renderTooltip={(i) => (
+              <>
+                <TooltipTitle>{rows[i]?.label}</TooltipTitle>
+                <TooltipValue color={EDGE_CHART_COLORS.gen}>
+                  {fmtMetric(rows[i]?.gen, decimals, unit)}
+                </TooltipValue>
+              </>
             )}
-          </ResponsiveContainer>
+          />
         )}
-      </div>
-      <p className="mt-2 text-[11px] text-slate-400">
+      </View>
+      <Text className="mt-2 text-[11px] text-slate-400">
         {title} — {period === "day" ? "journée" : "période"} sélectionnée.
-      </p>
-    </section>
+      </Text>
+    </Card>
   );
 }

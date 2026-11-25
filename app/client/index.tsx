@@ -1,106 +1,115 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Link } from "expo-router";
-import { JoyaEyebrow, JoyaPageHeader } from "@/components/joya";
+import { Link, router } from "expo-router";
+import { JoyaEyebrow, JoyaLogo } from "@/components/joya";
 import { Card, CardContent } from "@/components/ui/card";
+import { ClientDashboard } from "@/components/client/dashboard/client-dashboard";
 import { useAuth } from "@/contexts/auth-context";
 import { useClientJourney } from "@/contexts/client-journey-context";
-import { clientDashboardApi } from "@/lib/dashboard/api";
-import type { ClientDashboardData } from "@/types/dashboard";
+import { useResolvedAvatarUrl } from "@/hooks/use-resolved-avatar-url";
 import { joyaColors } from "@/theme/colors";
 
 export default function ClientHomeScreen() {
   const { user, logout } = useAuth();
-  const { phase, journey, isLoading: journeyLoading, refetchJourney } =
+  const { phase, isLoading: journeyLoading, refetchJourney } =
     useClientJourney();
   const [refreshing, setRefreshing] = useState(false);
-  const [data, setData] = useState<ClientDashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingDash, setLoadingDash] = useState(true);
+  const [dashKey, setDashKey] = useState(0);
+  const { src: avatarSrc, failed, setFailed } = useResolvedAvatarUrl(
+    user?.avatar,
+  );
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      if (phase && phase !== "dashboard") {
-        setData(null);
-        return;
-      }
-      const dashboard = await clientDashboardApi.fetch();
-      setData(dashboard);
-    } catch {
-      setError(
-        phase === "dashboard"
-          ? "Impossible de charger le tableau de bord."
-          : null,
-      );
-      setData(null);
-    } finally {
-      setLoadingDash(false);
-    }
-  }, [phase]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([load(), refetchJourney()]);
+    await refetchJourney();
+    setDashKey((k) => k + 1);
     setRefreshing(false);
-  };
+  }, [refetchJourney]);
 
-  const firstName = user?.full_name?.split(" ")[0];
-  const kpis = data?.kpis?.slice(0, 4) ?? [];
+  const showDashboard = !phase || phase === "dashboard";
+
+  const initials = useMemo(() => {
+    const parts = (user?.full_name ?? "").split(" ").filter(Boolean).slice(0, 2);
+    return parts.map((p) => p.charAt(0).toUpperCase()).join("") || "J";
+  }, [user?.full_name]);
+
+  const showAvatar = Boolean(avatarSrc) && !failed;
 
   return (
     <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
       <ScrollView
-        className="flex-1 px-5"
+        className="flex-1"
         contentContainerStyle={{ paddingBottom: 110 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View className="mb-4 mt-2 flex-row items-start justify-between">
-          <View className="flex-1 pr-3">
-            <JoyaPageHeader
-              eyebrow="Espace client"
-              title={`Bonjour${firstName ? `, ${firstName}` : ""}`}
-              description={
-                journeyLoading
-                  ? "Chargement du parcours…"
-                  : `Phase : ${phase ?? "—"}`
-              }
-            />
-          </View>
+        <View className="mb-3 mt-2 flex-row items-center justify-between px-4">
           <Pressable
-            onPress={logout}
-            className="rounded-full border border-line bg-white px-3 py-2"
+            onPress={() => router.push("/client")}
+            accessibilityRole="button"
+            accessibilityLabel="Joya Energy — accueil"
+            hitSlop={8}
           >
-            <Text className="text-xs font-semibold text-coral-dark">
-              Déconnexion
-            </Text>
+            <JoyaLogo variant="mark" height={32} />
           </Pressable>
+
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => router.push("/client/profile")}
+              accessibilityRole="button"
+              accessibilityLabel="Mon profil"
+              className="h-9 w-9 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-coral-soft"
+              style={{
+                shadowColor: joyaColors.navy,
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 1 },
+                elevation: 2,
+              }}
+            >
+              {showAvatar ? (
+                <Image
+                  source={{ uri: avatarSrc! }}
+                  style={{ width: "100%", height: "100%" }}
+                  contentFit="cover"
+                  onError={() => setFailed(true)}
+                  accessibilityLabel={user?.full_name ?? "Profil"}
+                />
+              ) : (
+                <Text className="font-display text-[13px] font-bold text-coral">
+                  {initials}
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={logout}
+              className="rounded-full border border-line bg-white px-3 py-2"
+            >
+              <Text className="text-xs font-semibold text-coral-dark">
+                Déconnexion
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
-        {loadingDash && phase === "dashboard" ? (
-          <ActivityIndicator color={joyaColors.coral} className="mt-10" />
-        ) : null}
-
-        {error ? (
-          <Text className="mb-3 text-sm text-danger">{error}</Text>
+        {journeyLoading ? (
+          <Text className="mb-3 px-3 text-sm text-ink-muted">
+            Chargement du parcours…
+          </Text>
         ) : null}
 
         {phase && phase !== "dashboard" ? (
-          <Card className="mb-4 rounded-2xl">
+          <Card className="mx-3 mb-4 rounded-2xl">
             <CardContent className="gap-2 p-5">
               <JoyaEyebrow>Parcours</JoyaEyebrow>
               <Text className="font-display text-xl font-bold text-navy">
@@ -128,7 +137,7 @@ export default function ClientHomeScreen() {
                 <Link href="/client/onboarding" asChild>
                   <Pressable className="mt-2 rounded-2xl bg-coral px-4 py-3">
                     <Text className="text-center font-semibold text-white">
-                      Ouvrir l&apos;intégration
+                      Ouvrir l'intégration
                     </Text>
                   </Pressable>
                 </Link>
@@ -146,47 +155,7 @@ export default function ClientHomeScreen() {
           </Card>
         ) : null}
 
-        <View className="gap-3">
-          {kpis.map((kpi) => (
-            <Card key={kpi.id} className="rounded-2xl">
-              <CardContent className="gap-1 p-5">
-                <JoyaEyebrow>{kpi.label}</JoyaEyebrow>
-                <Text className="font-display text-3xl font-bold text-navy">
-                  {kpi.displayValue}
-                </Text>
-                {kpi.footnote ? (
-                  <Text className="text-sm text-ink-muted">{kpi.footnote}</Text>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
-        </View>
-
-        <View className="mt-6 gap-2">
-          <Text className="font-display text-base font-semibold text-navy">
-            Raccourcis
-          </Text>
-          <Link href="/client/monitoring" asChild>
-            <Pressable className="rounded-2xl border border-line bg-white px-4 py-3.5">
-              <Text className="font-medium text-navy">Suivi / monitoring</Text>
-            </Pressable>
-          </Link>
-          <Link href="/client/consumption" asChild>
-            <Pressable className="rounded-2xl border border-line bg-white px-4 py-3.5">
-              <Text className="font-medium text-navy">Consommation</Text>
-            </Pressable>
-          </Link>
-          <Link href="/client/informations" asChild>
-            <Pressable className="rounded-2xl border border-line bg-white px-4 py-3.5">
-              <Text className="font-medium text-navy">Mes informations</Text>
-            </Pressable>
-          </Link>
-          <Link href="/client/profile" asChild>
-            <Pressable className="rounded-2xl border border-line bg-white px-4 py-3.5">
-              <Text className="font-medium text-navy">Profil</Text>
-            </Pressable>
-          </Link>
-        </View>
+        {showDashboard ? <ClientDashboard key={dashKey} /> : null}
       </ScrollView>
     </SafeAreaView>
   );

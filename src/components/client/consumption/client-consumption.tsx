@@ -1,10 +1,8 @@
-"use client";
-
 import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import {
   Activity,
   Building2,
-  CalendarDays,
   CalendarRange,
   Eye,
   Gauge,
@@ -13,14 +11,12 @@ import {
   Timer,
   TrendingDown,
   Zap,
-} from "lucide-react";
+} from "lucide-react-native";
 import { EnergyEfficiencySection } from "@/components/client/consumption/energy-efficiency-section";
 import { translateUserMessage } from "@/lib/user-messages";
 import { useDeviceScope } from "@/contexts/device-scope-context";
 import { DeviceScopeLoadingOverlay } from "@/components/client/device-scope-loading-overlay";
 import { useEdgeConsumption } from "@/hooks/use-edge-consumption";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   JoyaEmptyState,
   JoyaErrorState,
@@ -29,17 +25,13 @@ import {
   JoyaPageHeader,
   JoyaSectionHeader,
 } from "@/components/joya";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PillSelect } from "@/components/client/onboarding-info/pill-select";
+import { DatePill } from "@/components/client/consumption/date-pill";
 import { cn } from "@/lib/utils";
 import {
   DailyEnergyBarChart,
   MetricLinePanel,
+  TABULAR,
   fmtMetric,
   mean,
   sumPhases,
@@ -52,6 +44,9 @@ import {
   hourlyEnergyRows,
   mapDayMetricSeries,
 } from "@/lib/consumption/hourly-energy";
+import { joyaColors } from "@/theme/colors";
+
+const HEADER_IMAGE = require("../../../../assets/brand/images/wind-turbines-dusk.jpg");
 
 function todayYmdLocal(): string {
   return new Date().toLocaleDateString("en-CA", {
@@ -89,6 +84,17 @@ function trackingSinceLabel(iso: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function isDeviceOnline(
+  device: { status: string; last_seen_at: string | null } | undefined,
+): boolean {
+  if (!device) return false;
+  if (device.status === "active") return true;
+  return Boolean(
+    device.last_seen_at &&
+      Date.now() - new Date(device.last_seen_at).getTime() < 15 * 60 * 1000,
+  );
 }
 
 function fmtKwhNumber(v: number | null | undefined): string {
@@ -226,18 +232,9 @@ export function ClientConsumption() {
     }
     return m;
   })();
-  const totalCardKwh = (() => {
-    const a = monitor?.consumption.all_time_kwh ?? null;
-    if (a != null && monthCardKwh != null && a + 1e-6 < monthCardKwh) {
-      return monthCardKwh;
-    }
-    return a;
-  })();
+  const totalCardKwh = monitor?.consumption.all_time_kwh ?? null;
 
-  const online =
-    monitor?.device.status === "active" ||
-    (monitor?.device.last_seen_at &&
-      Date.now() - new Date(monitor.device.last_seen_at).getTime() < 15 * 60 * 1000);
+  const online = isDeviceOnline(monitor?.device);
 
   if (devicesLoading && !monitor) {
     return <ConsumptionSkeleton />;
@@ -247,7 +244,10 @@ export function ClientConsumption() {
     return (
       <JoyaErrorState
         className="rounded-2xl border border-line bg-white"
-        description={translateUserMessage(error.message, "Impossible de charger les données.")}
+        description={translateUserMessage(
+          error.message,
+          "Impossible de charger les données.",
+        )}
         onRetry={() => reload()}
       />
     );
@@ -287,13 +287,41 @@ export function ClientConsumption() {
     },
   ];
 
+  const meterTiles = [
+    {
+      lbl: "Puissance active totale",
+      val: fmtMetric(latest?.active_power_total_kw, 3, "kW"),
+    },
+    {
+      lbl: "Puissance apparente totale",
+      val: fmtMetric(latest?.apparent_power_total_kva, 3, "kVA"),
+    },
+    {
+      lbl: "Puissance réactive totale",
+      val: fmtMetric(latest?.reactive_power_total_kvar, 3, "kVAR"),
+    },
+    {
+      lbl: "Fréquence réseau",
+      val: fmtMetric(latest?.frequency_hz, 1, "Hz"),
+    },
+  ];
+
+  const tabs = [
+    { id: "analyse" as const, label: "Consommation", icon: Zap },
+    {
+      id: "efficiency" as const,
+      label: "Efficacité énergétique",
+      icon: TrendingDown,
+    },
+  ];
+
   return (
-    <div className="joya-stagger relative flex w-full flex-col gap-5 pb-8 lg:gap-6">
+    <View className="relative w-full flex-col gap-5 pb-8">
       <DeviceScopeLoadingOverlay />
 
       <JoyaPageHeader
         eyebrow="Supervision · Consommation"
-        image="/brand/images/wind-turbines-dusk.jpg"
+        image={HEADER_IMAGE}
         title={panel === "efficiency" ? "Efficacité énergétique" : "Consommation"}
         description={
           panel === "efficiency"
@@ -302,93 +330,100 @@ export function ClientConsumption() {
         }
         meta={
           activeSite?.name ? (
-            <Badge
-              tone="outline"
-              size="lg"
-              className="border-white/20 bg-white/12 text-white backdrop-blur-sm"
-            >
-              <Building2 className="h-3.5 w-3.5 text-coral" aria-hidden />
-              {activeSite.name}
-            </Badge>
+            <View className="h-7 flex-row items-center gap-1.5 self-start rounded-full border border-white/20 bg-white/10 px-3">
+              <Building2 size={14} color={joyaColors.coral} />
+              <Text
+                numberOfLines={1}
+                className="shrink text-[13px] font-medium text-white"
+              >
+                {activeSite.name}
+              </Text>
+            </View>
           ) : null
         }
         actions={
-          <>
-            <label className="flex h-10 items-center gap-2 rounded-pill border border-white/20 bg-white/12 px-3.5 text-white backdrop-blur-sm transition-[border-color,box-shadow] focus-within:border-coral focus-within:ring-2 focus-within:ring-coral/20">
-              <CalendarDays className="h-4 w-4 text-coral" aria-hidden />
-              <span className="sr-only">Jour affiché</span>
-              <input
-                type="date"
-                value={selectedDate}
-                max={todayYmdLocal()}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="border-0 bg-transparent font-data text-[13px] font-medium text-white outline-none [color-scheme:dark]"
-              />
-            </label>
+          <View className="flex-row flex-wrap items-center gap-2">
+            <DatePill
+              tone="dark"
+              label="Jour affiché"
+              value={selectedDate}
+              max={todayYmdLocal()}
+              onChange={setSelectedDate}
+            />
             {devices.length > 1 ? (
-              <Select value={deviceId ?? undefined} onValueChange={setDeviceId}>
-                <SelectTrigger className="h-10 w-[170px] rounded-pill border-white/20 bg-white/12 text-white" aria-label="Compteur">
-                  <SelectValue placeholder="Compteur" />
-                </SelectTrigger>
-                <SelectContent>
-                  {devices.map((d) => (
-                    <SelectItem key={d.device_id} value={d.device_id}>
-                      <span className="font-data">…{d.device_id.slice(-8)}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PillSelect
+                label="Compteur"
+                className="h-10 w-[170px] border-white/20 bg-white"
+                value={deviceId ?? ""}
+                options={devices.map((d) => ({
+                  value: d.device_id,
+                  label: `…${d.device_id.slice(-8)}`,
+                }))}
+                onChange={(id) => setDeviceId(id)}
+              />
             ) : (
-              <span className="inline-flex h-10 items-center rounded-pill border border-white/20 bg-white/12 px-3.5 text-[13px] font-medium text-white backdrop-blur-sm">
-                Compteur principal
-              </span>
+              <View className="h-10 items-center justify-center rounded-full border border-white/20 bg-white/10 px-3.5">
+                <Text className="text-[13px] font-medium text-white">
+                  Compteur principal
+                </Text>
+              </View>
             )}
-            <Button
-              type="button"
-              size="sm"
-              className="h-10 bg-coral px-4 text-white hover:bg-coral-dark"
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Actualiser"
               disabled={monitorLoading}
-              onClick={() => reload()}
+              onPress={() => reload()}
+              className={cn(
+                "h-10 flex-row items-center gap-2 rounded-2xl bg-coral px-4 active:bg-coral-dark",
+                monitorLoading && "opacity-60",
+              )}
             >
-              <RefreshCw className={cn("h-4 w-4", monitorLoading && "animate-spin")} aria-hidden />
-              Actualiser
-            </Button>
-          </>
+              {monitorLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <RefreshCw size={16} color="#fff" />
+              )}
+              <Text className="text-sm font-semibold text-white">Actualiser</Text>
+            </Pressable>
+          </View>
         }
       />
 
-      <div
-        className="inline-flex w-full max-w-md self-start rounded-pill border border-line bg-white p-1 shadow-joya-xs"
-        role="tablist"
-        aria-label="Vues consommation"
+      <View
+        accessibilityRole="tablist"
+        accessibilityLabel="Vues consommation"
+        className="w-full flex-row self-start rounded-full border border-line bg-white p-1 shadow-joya-xs"
       >
-        {(
-          [
-            { id: "analyse" as const, label: "Consommation", icon: Zap },
-            { id: "efficiency" as const, label: "Efficacité énergétique", icon: TrendingDown },
-          ] as const
-        ).map((tab) => {
+        {tabs.map((tab) => {
           const Icon = tab.icon;
+          const active = panel === tab.id;
           return (
-            <button
+            <Pressable
               key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={panel === tab.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              onPress={() => setPanel(tab.id)}
               className={cn(
-                "inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-pill px-3 text-[13px] font-semibold transition-[background-color,color,box-shadow] duration-base ease-joya focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy",
-                panel === tab.id
-                  ? "bg-navy text-white shadow-joya-sm"
-                  : "text-slate-500 hover:bg-cream hover:text-navy",
+                "h-10 flex-1 flex-row items-center justify-center gap-2 rounded-full px-3",
+                active && "bg-navy shadow-joya-sm",
               )}
-              onClick={() => setPanel(tab.id)}
             >
-              <Icon className={cn("h-4 w-4", panel === tab.id ? "text-white" : "text-slate-400")} aria-hidden />
-              {tab.label}
-            </button>
+              <Icon size={16} color={active ? "#fff" : "#94a3b8"} />
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                className={cn(
+                  "shrink text-[13px] font-semibold",
+                  active ? "text-white" : "text-slate-500",
+                )}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
           );
         })}
-      </div>
+      </View>
 
       {panel === "efficiency" ? (
         <EnergyEfficiencySection
@@ -402,186 +437,191 @@ export function ClientConsumption() {
           isToday={isToday}
           hasMeter={devices.length > 0}
         />
-      ) : !devices.length ? (
-        <JoyaEmptyState
-          className="rounded-2xl border border-dashed border-line-strong bg-white"
-          icon={Gauge}
-          title="Aucun compteur de consommation sur ce site"
-          description="Les données apparaîtront ici dès qu'un compteur JOYA Edge sera rattaché à votre site."
-        />
       ) : (
         <>
-          <section aria-labelledby="conso-summary" className="flex flex-col gap-4">
-            <JoyaSectionHeader
-              icon={<Eye aria-hidden />}
-              iconVariant="filled"
-              title={<span id="conso-summary">Votre consommation en un coup d&apos;œil</span>}
-              description="Énergie consommée aujourd&apos;hui, ce mois-ci et depuis l&apos;installation"
+          {!devices.length ? (
+            <JoyaEmptyState
+              className="rounded-2xl border border-dashed border-line-strong bg-white"
+              icon={Gauge}
+              title="Aucun compteur de consommation sur ce site"
+              description="Les données apparaîtront ici dès qu'un compteur JOYA Edge sera rattaché à votre site."
             />
-            <div className="grid gap-3 sm:grid-cols-3">
-              {summaryCards.map((card) => (
-                <JoyaKpiCard
-                  key={card.key}
-                  size="lg"
-                  variant={card.variant}
-                  icon={card.icon}
-                  tone={card.tone}
-                  label={card.title}
-                  value={fmtKwhNumber(card.value)}
-                  unit={card.value != null ? "kWh" : undefined}
-                  valueClassName={card.variant === "hot" ? "text-coral" : undefined}
-                  footnote={card.subtitle}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-[22px] border border-line bg-white p-5 shadow-joya-sm sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-navy text-white">
-                  <Timer className="h-5 w-5" aria-hidden />
-                </span>
-                <div className="min-w-0 pt-0.5">
-                  <h2 className="font-display text-[1.05rem] font-bold tracking-tight text-navy">
-                    Mesures du compteur
-                  </h2>
-                  <p className="mt-0.5 text-[13px] text-ink-muted">
-                    Analyseur d&apos;énergie triphasé · Instantané de la dernière
-                    mesure
-                  </p>
-                </div>
-              </div>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold",
-                  online
-                    ? "bg-coral-wash text-coral"
-                    : "bg-slate-100 text-slate-500",
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    online ? "bg-coral" : "bg-slate-400",
-                  )}
-                />
-                {online ? "En ligne" : "Hors ligne"}
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {[
-                {
-                  lbl: "Site",
-                  val: activeSite?.name ?? monitor?.device.site_name ?? "—",
-                  mono: false,
-                },
-                {
-                  lbl: "Fréquence réseau",
-                  val: fmtMetric(latest?.frequency_hz, 1, "Hz"),
-                  mono: true,
-                },
-                {
-                  lbl: "Facteur de puissance",
-                  val: fmtMetric(latest?.power_factor, 2),
-                  mono: true,
-                },
-              ].map((item) => (
-                <div
-                  key={item.lbl}
-                  className="rounded-[16px] bg-cream-2/90 px-4 py-3"
-                >
-                  <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                    {item.lbl}
-                  </p>
-                  <p
-                    className={cn(
-                      "mt-1 truncate font-display text-[1.05rem] font-bold text-navy",
-                      item.mono && "tabular-nums",
-                    )}
-                  >
-                    {item.val}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {monitorLoading && !monitor ? (
-            <JoyaLoadingState label="Chargement des courbes…" className="min-h-[16rem]" />
           ) : (
             <>
-              <section className="flex flex-col gap-4">
+              <View className="flex-col gap-4">
                 <JoyaSectionHeader
-                  icon={<Activity aria-hidden />}
+                  className="mb-0"
+                  icon={<Eye size={18} color="#fff" />}
                   iconVariant="filled"
-                  title="Évolution sur la journée"
-                  description="Grandeurs électriques · intervalle de 15 min"
+                  title="Votre consommation en un coup d'œil"
+                  description="Énergie consommée aujourd'hui, ce mois-ci et depuis l'installation"
                 />
-                <div className="grid gap-4 lg:grid-cols-2" key={selectedDate}>
-                  <MetricLinePanel
-                    title="Puissance active"
-                    unit="kW"
-                    decimals={3}
-                    rows={activeRows}
-                    mode={modeActive}
-                    onModeChange={setModeActive}
-                    hourAxis={activeSeries.resolution === "hour"}
-                  />
-                  <MetricLinePanel
-                    title="Tension"
-                    unit="V"
-                    decimals={0}
-                    rows={voltageRows}
-                    mode={modeVoltage}
-                    onModeChange={setModeVoltage}
-                    hourAxis={voltageSeries.resolution === "hour"}
-                  />
-                  <MetricLinePanel
-                    title="Courant"
-                    unit="A"
-                    decimals={2}
-                    rows={currentRows}
-                    mode={modeCurrent}
-                    onModeChange={setModeCurrent}
-                    hourAxis={currentSeries.resolution === "hour"}
-                  />
-                  <MetricLinePanel
-                    title="Facteur de puissance"
-                    unit="cos φ"
-                    decimals={2}
-                    rows={pfRows}
-                    mode="gen"
-                    showPhaseToggle={false}
-                    hourAxis={pfSeries.resolution === "hour"}
-                  />
-                </div>
-              </section>
+                <View className="flex-col gap-3">
+                  {summaryCards.map((card) => (
+                    <JoyaKpiCard
+                      key={card.key}
+                      size="lg"
+                      variant={card.variant}
+                      icon={card.icon}
+                      tone={card.tone}
+                      label={card.title}
+                      value={fmtKwhNumber(card.value)}
+                      unit={card.value != null ? "kWh" : undefined}
+                      valueClassName={
+                        card.variant === "hot" ? "text-coral" : undefined
+                      }
+                      footnote={card.subtitle}
+                    />
+                  ))}
+                </View>
+              </View>
 
-              <DailyEnergyBarChart
-                data={dailyEnergy}
-                dateLabel={formatDayLabel(selectedDate)}
-                dayTotal={todayCardKwh}
-              />
+              <View className="rounded-[22px] border border-line bg-white p-5 shadow-joya-sm">
+                <View className="flex-row flex-wrap items-start justify-between gap-3">
+                  <View className="min-w-0 flex-1 flex-row items-start gap-3">
+                    <View className="h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-navy">
+                      <Timer size={20} color="#fff" />
+                    </View>
+                    <View className="min-w-0 flex-1 pt-0.5">
+                      <Text className="font-display text-[17px] font-bold tracking-tight text-navy">
+                        Mesures du compteur
+                      </Text>
+                      <Text className="mt-0.5 text-[13px] text-ink-muted">
+                        Analyseur d&apos;énergie triphasé · Instantané de la
+                        dernière mesure
+                        {activeSite?.name || monitor?.device.site_name
+                          ? ` · ${activeSite?.name ?? monitor?.device.site_name}`
+                          : ""}
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    className={cn(
+                      "flex-row items-center gap-1.5 rounded-full px-2.5 py-1",
+                      online ? "bg-coral-wash" : "bg-slate-100",
+                    )}
+                  >
+                    <View
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        online ? "bg-coral" : "bg-slate-400",
+                      )}
+                    />
+                    <Text
+                      className={cn(
+                        "text-[12px] font-semibold",
+                        online ? "text-coral" : "text-slate-500",
+                      )}
+                    >
+                      {online ? "En ligne" : "Hors ligne"}
+                    </Text>
+                  </View>
+                </View>
+                <View className="mt-4 flex-col gap-2">
+                  {meterTiles.map((item) => (
+                    <View
+                      key={item.lbl}
+                      className="rounded-[16px] bg-cream-2 px-4 py-3"
+                    >
+                      <Text className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                        {item.lbl}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        className="mt-1 font-display text-[17px] font-bold text-navy"
+                        style={TABULAR}
+                      >
+                        {item.val}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
 
-              <ConsumptionHistorySection
-                deviceId={deviceId}
-                trackingSince={monitor?.consumption.tracking_since}
-              />
+              {monitorLoading && !monitor ? (
+                <JoyaLoadingState
+                  label="Chargement des courbes…"
+                  className="min-h-[256px]"
+                />
+              ) : (
+                <>
+                  <View className="flex-col gap-4">
+                    <JoyaSectionHeader
+                      className="mb-0"
+                      icon={<Activity size={18} color="#fff" />}
+                      iconVariant="filled"
+                      title="Évolution sur la journée"
+                      description="Grandeurs électriques · intervalle de 15 min"
+                    />
+                    <View key={selectedDate} className="flex-col gap-4">
+                      <MetricLinePanel
+                        title="Puissance active"
+                        unit="kW"
+                        decimals={3}
+                        rows={activeRows}
+                        mode={modeActive}
+                        onModeChange={setModeActive}
+                        hourAxis={activeSeries.resolution === "hour"}
+                      />
+                      <MetricLinePanel
+                        title="Tension"
+                        unit="V"
+                        decimals={0}
+                        rows={voltageRows}
+                        mode={modeVoltage}
+                        onModeChange={setModeVoltage}
+                        hourAxis={voltageSeries.resolution === "hour"}
+                      />
+                      <MetricLinePanel
+                        title="Courant"
+                        unit="A"
+                        decimals={2}
+                        rows={currentRows}
+                        mode={modeCurrent}
+                        onModeChange={setModeCurrent}
+                        hourAxis={currentSeries.resolution === "hour"}
+                      />
+                      <MetricLinePanel
+                        title="Facteur de puissance"
+                        unit="cos φ"
+                        decimals={2}
+                        rows={pfRows}
+                        mode="gen"
+                        showPhaseToggle={false}
+                        hourAxis={pfSeries.resolution === "hour"}
+                      />
+                    </View>
+                  </View>
+
+                  <DailyEnergyBarChart
+                    data={dailyEnergy}
+                    dateLabel={formatDayLabel(selectedDate)}
+                    dayTotal={todayCardKwh}
+                  />
+
+                  <ConsumptionHistorySection
+                    deviceId={deviceId}
+                    trackingSince={monitor?.consumption.tracking_since}
+                  />
+                </>
+              )}
+
+              {monitor?.device.last_telemetry_at ? (
+                <Text className="text-center font-data text-[11px] text-ink-faint">
+                  Dernière mesure ·{" "}
+                  {new Date(monitor.device.last_telemetry_at).toLocaleString(
+                    "fr-FR",
+                  )}
+                </Text>
+              ) : null}
             </>
           )}
 
           <ClientPowerOutageHoursChart
             trackingSince={monitor?.consumption.tracking_since}
           />
-
-          {monitor?.device.last_telemetry_at ? (
-            <p className="text-center font-data text-[11px] text-ink-faint">
-              Dernière mesure · {new Date(monitor.device.last_telemetry_at).toLocaleString("fr-FR")}
-            </p>
-          ) : null}
         </>
       )}
-    </div>
+    </View>
   );
 }

@@ -1,9 +1,9 @@
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react-native";
+import { Text, View } from "react-native";
 import type { HighlightMetric } from "@/lib/dashboard/dashboard-performance-metrics";
 import { JoyaKpiCard, type JoyaTone } from "@/components/joya";
 import { cn } from "@/lib/utils";
 
-/** Business accents → Joya tones (limited palette, consistent meaning). */
 const ACCENT_TONE: Record<HighlightMetric["accent"], JoyaTone> = {
   orange: "coral",
   green: "success",
@@ -21,14 +21,13 @@ const SURFACE: Partial<Record<string, "default" | "hot" | "navy">> = {
 
 const SUN_BADGES = new Set(["Cumul", "Impact", "PV", "YTD", "Import"]);
 
-/** Mockup icon chips — leaf cream/coral, calendar blue/navy. */
 const ICON_CHIP: Partial<Record<string, string>> = {
-  co2: "bg-cream-2 text-coral",
-  monthly: "bg-blue-tint text-navy",
-  "cons-monthly": "bg-blue-tint text-navy",
-  "flow-auto": "bg-coral-soft text-coral",
-  "flow-export": "bg-blue-tint text-navy",
-  "flow-import": "bg-warning-soft text-warning",
+  co2: "bg-cream-2",
+  monthly: "bg-blue-tint",
+  "cons-monthly": "bg-blue-tint",
+  "flow-auto": "bg-coral-soft",
+  "flow-export": "bg-blue-tint",
+  "flow-import": "bg-warning-soft",
 };
 
 function splitValueUnit(raw: string): { value: string; unit?: string } {
@@ -45,12 +44,32 @@ function badgeClass(
   metric: HighlightMetric,
   variant: "default" | "hot" | "navy",
 ): string {
-  if (variant === "navy") return "bg-white/12 text-white/80";
-  if (variant === "hot") return "bg-white/85 text-coral";
-  if (metric.badge === "Auj." || SUN_BADGES.has(metric.badge ?? "") || metric.accent === "yellow") {
-    return "bg-warning-soft text-warning";
+  if (variant === "navy") return "bg-white/12";
+  if (variant === "hot") return "bg-white/85";
+  if (
+    metric.badge === "Auj." ||
+    SUN_BADGES.has(metric.badge ?? "") ||
+    metric.accent === "yellow"
+  ) {
+    return "bg-warning-soft";
   }
-  return "bg-slate-100 text-navy/55";
+  return "bg-slate-100";
+}
+
+function badgeTextClass(
+  metric: HighlightMetric,
+  variant: "default" | "hot" | "navy",
+): string {
+  if (variant === "navy") return "text-white/80";
+  if (variant === "hot") return "text-coral";
+  if (
+    metric.badge === "Auj." ||
+    SUN_BADGES.has(metric.badge ?? "") ||
+    metric.accent === "yellow"
+  ) {
+    return "text-warning";
+  }
+  return "text-navy/55";
 }
 
 type MetricHighlightCardProps = {
@@ -85,14 +104,21 @@ export function MetricHighlightCard({
       }
       badge={
         metric.badge ? (
-          <span
+          <View
             className={cn(
-              "inline-flex h-6 items-center rounded-full px-2.5 font-data text-[11px] font-semibold",
+              "h-6 items-center justify-center rounded-full px-2.5",
               badgeClass(metric, variant),
             )}
           >
-            {metric.badge}
-          </span>
+            <Text
+              className={cn(
+                "font-data text-[11px] font-semibold",
+                badgeTextClass(metric, variant),
+              )}
+            >
+              {metric.badge}
+            </Text>
+          </View>
         ) : null
       }
     />

@@ -1,6 +1,5 @@
-"use client";
-
 import { useMemo } from "react";
+import { Text, View } from "react-native";
 import {
   Activity,
   ArrowDownToLine,
@@ -14,8 +13,8 @@ import {
   Sun,
   TrendingUp,
   Zap,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+  type LucideIcon,
+} from "lucide-react-native";
 import type { ClientDashboardData } from "@/types/dashboard";
 import { useIntradayPower } from "@/hooks/use-intraday-power";
 import { usableTodayProductionKwh } from "@/lib/dashboard/intraday-api";
@@ -69,7 +68,6 @@ function MetricSection({
   description,
   metrics,
   icons,
-  gridClassName,
   indexVariant = "filled",
 }: {
   index: number;
@@ -77,28 +75,28 @@ function MetricSection({
   description?: string;
   metrics: HighlightMetric[];
   icons: Record<string, LucideIcon>;
-  gridClassName: string;
   indexVariant?: "wash" | "filled";
 }) {
   return (
-    <div className="min-w-0">
+    <View className="min-w-0">
       <JoyaSectionHeader
-        as="h3"
         index={index}
         indexVariant={indexVariant}
         title={title}
         description={description}
         className="mb-4"
       />
-      <div className={gridClassName}>
+      <View className="flex-row flex-wrap gap-3">
         {metrics.map((metric) => {
           const Icon = icons[metric.id] ?? TrendingUp;
           return (
-            <MetricHighlightCard key={metric.id} metric={metric} icon={Icon} />
+            <View key={metric.id} className="min-w-[46%] flex-1">
+              <MetricHighlightCard metric={metric} icon={Icon} />
+            </View>
           );
         })}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
 
@@ -116,13 +114,11 @@ function trackingSinceLabelFr(iso: string | null | undefined): string | null {
   }
 }
 
-/** Keep 0 (valid daily sum); only drop missing/NaN. */
 function finiteOrZero(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   return Math.max(0, value);
 }
 
-/** Treat 0 as missing so meter zeros don't block energy-balance fallbacks. */
 function positiveOrNull(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;
   return value;
@@ -168,8 +164,6 @@ export function DashboardPerformanceSection({
   const allTimeLoadKwh = positiveOrNull(
     edgeMonitor?.consumption.all_time_kwh,
   );
-  // Prefer calendar / lifetime load — do not use month-only for annual balance
-  // (that understates load vs YTD production and forces Import → 0).
   const loadYtdKwh = yearLoadKwh ?? allTimeLoadKwh;
 
   const consumptionMetrics = useMemo(() => {
@@ -208,7 +202,8 @@ export function DashboardPerformanceSection({
       edgeMonitor?.consumption.year_daily_auto_kwh,
     );
     const flowDays = edgeMonitor?.consumption.year_daily_flow_days ?? 0;
-    const hasDailyFlow = flowDays > 0 && (dailyExport != null || dailyImport != null);
+    const hasDailyFlow =
+      flowDays > 0 && (dailyExport != null || dailyImport != null);
     const annualProductionKwh =
       dailyAuto != null && dailyExport != null
         ? dailyAuto + dailyExport
@@ -227,58 +222,52 @@ export function DashboardPerformanceSection({
   const updateLine = formatPerformanceUpdateLine(data.site);
 
   return (
-    <section className="rounded-[28px] border border-line bg-white shadow-joya-sm">
-      <header className="flex flex-col gap-2 px-5 pb-2 pt-5 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:pt-6">
-        <div>
+    <View className="rounded-[28px] border border-line bg-white shadow-joya-sm">
+      <View className="gap-2 px-5 pb-2 pt-5">
+        <View>
           <JoyaEyebrow>Performance</JoyaEyebrow>
-          <h2 className="mt-1.5 font-display text-[1.65rem] font-bold tracking-tight text-navy">
-            Vue d&apos;ensemble
-          </h2>
-        </div>
-        <p className="flex items-center gap-2 font-data text-[12px] text-ink-faint sm:pt-1 sm:text-right">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue" aria-hidden />
-          Mis à jour à {updateLine}
-        </p>
-      </header>
+          <Text className="mt-1.5 font-display text-[1.65rem] font-bold tracking-tight text-navy">
+            Vue d'ensemble
+          </Text>
+        </View>
+        <View className="flex-row items-center gap-2">
+          <View className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue" />
+          <Text className="font-data text-[12px] text-ink-faint">
+            Mis à jour à {updateLine}
+          </Text>
+        </View>
+      </View>
 
-      <div className="flex flex-col gap-8 p-5 pt-4 sm:p-6 sm:pt-5">
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:gap-6">
-          <MetricSection
-            index={1}
-            title="Économies énergétiques"
-            description="Production solaire et gains associés"
-            metrics={productionMetrics}
-            icons={PRODUCTION_ICONS}
-            gridClassName="grid grid-cols-1 gap-3 xs:grid-cols-2"
-          />
-          <MetricSection
-            index={2}
-            title="Consommation"
-            description="Énergie consommée par le site"
-            metrics={consumptionMetrics}
-            icons={CONSUMPTION_ICONS}
-            gridClassName="grid grid-cols-1 gap-3 xs:grid-cols-2 xs:[&>*:last-child]:col-span-2"
-          />
-        </div>
-
+      <View className="gap-8 p-5 pt-4">
+        <MetricSection
+          index={1}
+          title="Économies énergétiques"
+          description="Production solaire et gains associés"
+          metrics={productionMetrics}
+          icons={PRODUCTION_ICONS}
+        />
+        <MetricSection
+          index={2}
+          title="Consommation"
+          description="Énergie consommée par le site"
+          metrics={consumptionMetrics}
+          icons={CONSUMPTION_ICONS}
+        />
         <MetricSection
           index={3}
           title="Bilan financier & environnemental"
           description="Ce que votre installation vous rapporte"
           metrics={financialMetrics}
           icons={FINANCIAL_ICONS}
-          gridClassName="grid grid-cols-1 gap-3 xs:grid-cols-2 lg:grid-cols-4"
         />
-
         <MetricSection
           index={4}
           title="Flux énergétique annuel"
           description="Autoconsommation, injection et soutirage réseau"
           metrics={annualFlowMetrics}
           icons={FLOW_ICONS}
-          gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-3"
         />
-      </div>
-    </section>
+      </View>
+    </View>
   );
 }

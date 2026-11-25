@@ -4,17 +4,29 @@ import { Alert } from "react-native";
  * Drop-in stand-in for sonner `toast` used across copied customer-web files.
  * Replace with sonner-native once peer deps settle.
  */
+type ToastOpts = { description?: string; duration?: number };
+
+function show(title: string, message: string, opts?: ToastOpts) {
+  const body = opts?.description
+    ? `${message}\n${opts.description}`
+    : message;
+  Alert.alert(title, body);
+}
+
 export const toast = {
-  success(message: string) {
-    Alert.alert("", message);
+  success(message: string, opts?: ToastOpts) {
+    show("", message, opts);
   },
-  error(message: string) {
-    Alert.alert("Erreur", message);
+  error(message: string, opts?: ToastOpts) {
+    show("Erreur", message, opts);
   },
-  info(message: string) {
-    Alert.alert("", message);
+  info(message: string, opts?: ToastOpts) {
+    show("", message, opts);
   },
-  message(message: string) {
-    Alert.alert("", message);
+  warning(message: string, opts?: ToastOpts) {
+    show("Attention", message, opts);
+  },
+  message(message: string, opts?: ToastOpts) {
+    show("", message, opts);
   },
 };

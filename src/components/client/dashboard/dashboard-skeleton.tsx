@@ -1,70 +1,62 @@
-import { cn } from "@/lib/utils";
+import { View } from "react-native";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /** Mirrors the dashboard layout (hero → energy flow → performance). */
 export function DashboardSkeleton() {
   return (
-    <div
-      className="flex w-full flex-col gap-5 pb-6 lg:gap-6"
-      role="status"
-      aria-label="Chargement du tableau de bord"
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Chargement du tableau de bord"
+      className="w-full flex-col gap-5 pb-6"
     >
-      <div className="rounded-2xl border border-line bg-white p-5 shadow-joya-sm sm:p-7">
-        <Skeleton className="h-4 w-36 rounded-pill" />
-        <Skeleton className="mt-4 h-8 w-72 max-w-full" />
+      <View className="rounded-2xl border border-line bg-white p-5 shadow-joya-sm">
+        <Skeleton className="h-4 w-36 rounded-full" />
+        <Skeleton className="mt-4 h-8 w-3/4" />
         <Skeleton className="mt-3 h-4 w-48" />
-        <div className="mt-5 flex flex-wrap gap-2">
+        <View className="mt-5 flex-row flex-wrap gap-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-36 rounded-pill" />
+            <Skeleton key={i} className="h-8 w-28 rounded-full" />
           ))}
-        </div>
-      </div>
+        </View>
+      </View>
 
-      <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-joya-sm">
-        <div className="flex items-end justify-between gap-3 border-b border-line px-5 py-4">
-          <div className="space-y-2">
+      <View className="overflow-hidden rounded-2xl border border-line bg-white shadow-joya-sm">
+        <View className="flex-row items-end justify-between gap-3 border-b border-line px-5 py-4">
+          <View className="gap-2">
             <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-64" />
-          </div>
+            <Skeleton className="h-3 w-56" />
+          </View>
           <Skeleton className="h-8 w-8 rounded-full" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 p-5 min-[901px]:grid-cols-[1.6fr_1fr]">
-          <Skeleton className="aspect-[1024/742] rounded-xl" />
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="min-h-[5.5rem] flex-1 rounded-xl bg-success-soft" />
-            <Skeleton className="min-h-[5.5rem] flex-1 rounded-xl bg-coral-wash" />
-            <Skeleton className="min-h-[5.5rem] flex-1 rounded-xl bg-blue-soft" />
-          </div>
-        </div>
-      </div>
+        </View>
+        <View className="gap-4 p-5">
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl bg-success-soft" />
+          <Skeleton className="h-20 rounded-xl bg-coral-wash" />
+          <Skeleton className="h-20 rounded-xl bg-blue-soft" />
+        </View>
+      </View>
 
-      <div className="rounded-2xl border border-line bg-white shadow-joya-sm">
-        <div className="border-b border-line px-5 py-4">
-          <Skeleton className="h-3 w-24 rounded-pill" />
+      <View className="rounded-2xl border border-line bg-white shadow-joya-sm">
+        <View className="border-b border-line px-5 py-4">
+          <Skeleton className="h-3 w-24 rounded-full" />
           <Skeleton className="mt-2 h-5 w-40" />
-        </div>
-        <div className="space-y-8 p-5 sm:p-6">
+        </View>
+        <View className="gap-8 p-5">
           {[4, 4, 3].map((count, row) => (
-            <div key={row}>
-              <div className="mb-4 flex items-center gap-3">
+            <View key={row}>
+              <View className="mb-4 flex-row items-center gap-3">
                 <Skeleton className="h-9 w-9 rounded-[12px]" />
                 <Skeleton className="h-4 w-48" />
-              </div>
-              <div
-                className={cn(
-                  "grid grid-cols-1 gap-3 xs:grid-cols-2",
-                  count === 4 ? "lg:grid-cols-4" : "sm:grid-cols-3",
-                )}
-              >
+              </View>
+              <View className="flex-row flex-wrap gap-3">
                 {Array.from({ length: count }).map((_, i) => (
-                  <Skeleton key={i} className="h-28 rounded-xl" />
+                  <Skeleton key={i} className="h-28 min-w-[46%] flex-1 rounded-xl" />
                 ))}
-              </div>
-            </div>
+              </View>
+            </View>
           ))}
-        </div>
-      </div>
-    </div>
+        </View>
+      </View>
+    </View>
   );
 }

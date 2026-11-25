@@ -1,4 +1,8 @@
-import apiClient from "@/lib/api";
+import { apiClient } from "@/lib/api";
+import {
+  downloadApiFile,
+  type DownloadedApiFile,
+} from "@/lib/files/download-api-file";
 
 export type ClientInvoiceItem = {
   id: string;
@@ -22,16 +26,9 @@ export const invoicesApi = {
     return response.data.invoices ?? [];
   },
 
-  download: async (
-    periodKey: string,
-  ): Promise<{ blob: Blob; filename: string }> => {
-    const response = await apiClient.get<Blob>(
+  download: async (periodKey: string): Promise<DownloadedApiFile> =>
+    downloadApiFile(
       `/companies/me/invoices/${encodeURIComponent(periodKey)}/download`,
-      { responseType: "blob" },
-    );
-    const disposition = String(response.headers["content-disposition"] ?? "");
-    const match = /filename="?([^"]+)"?/i.exec(disposition);
-    const filename = match?.[1] ?? `facture-${periodKey}.pdf`;
-    return { blob: response.data, filename };
-  },
+      `facture-${periodKey}.pdf`,
+    ),
 };

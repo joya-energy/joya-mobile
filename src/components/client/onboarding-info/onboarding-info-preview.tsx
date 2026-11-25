@@ -1,6 +1,5 @@
-"use client";
-
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import {
   Building2,
   Check,
@@ -10,14 +9,23 @@ import {
   UserCircle,
   Wallet,
   Zap,
-} from "lucide-react";
+  type LucideIcon,
+} from "lucide-react-native";
+import { JoyaPageHeader } from "@/components/joya";
 import type { UploadFileRef } from "@/lib/files/api";
+import { openExternalUrl } from "@/lib/files/open-external-url";
 import { onboardingLabels } from "@/lib/onboarding/display-labels";
 import type { OnboardingSummary } from "@/lib/onboarding/fetch-onboarding-summary";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { JoyaPageHeader } from "@/components/joya";
+import { joyaColors } from "@/theme/colors";
 
 const SECTION_STEPS = [1, 2, 3, 4, 5] as const;
+
+/** Same breakpoint as the web `xs:` grid (2 columns from 420px). */
+const TWO_COLUMN_MIN_WIDTH = 420;
+
+const FieldColumnsContext = createContext<1 | 2>(1);
 
 /** Affichage : API + documents déposés (flux onboarding documents). */
 function inferDisplayCompletion(
@@ -51,23 +59,46 @@ function inferDisplayCompletion(
   };
 }
 
-function Field({ label, value }: { label: string; value: ReactNode }) {
+function FieldGrid({ children }: { children: ReactNode }) {
+  const { width } = useWindowDimensions();
+  const columns: 1 | 2 = width >= TWO_COLUMN_MIN_WIDTH ? 2 : 1;
+  return (
+    <FieldColumnsContext.Provider value={columns}>
+      <View className="flex-row flex-wrap gap-2">{children}</View>
+    </FieldColumnsContext.Provider>
+  );
+}
+
+function Field({
+  label,
+  value,
+  full = false,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  /** Span every column (web `xs:col-span-2`). */
+  full?: boolean;
+}) {
+  const columns = useContext(FieldColumnsContext);
   const empty = value == null || value === "" || value === "—";
   return (
-    <div className="min-w-0 rounded-[16px] bg-cream-2/90 px-3.5 py-3">
-      <dt className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-faint">
+    <View
+      className="min-w-0 rounded-[16px] bg-cream-2/90 px-3.5 py-3"
+      style={{ width: full || columns === 1 ? "100%" : "48.5%" }}
+    >
+      <Text className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-faint">
         {label}
-      </dt>
-      <dd
+      </Text>
+      <Text
+        numberOfLines={2}
         className={cn(
-          "mt-1 truncate text-[13.5px] leading-snug",
+          "mt-1 text-[13.5px] leading-snug",
           empty ? "font-medium text-ink-faint" : "font-semibold text-navy",
         )}
-        title={typeof value === "string" ? value : undefined}
       >
-        {empty ? "Non renseigné" : value}
-      </dd>
-    </div>
+        {empty ? "Non renseigné" : String(value)}
+      </Text>
+    </View>
   );
 }
 
@@ -75,18 +106,63 @@ function DocGroupLabel({
   children,
   count,
 }: {
-  children: ReactNode;
+  children: string;
   count?: number;
 }) {
   return (
-    <p className="mb-2 inline-flex items-center gap-1.5 font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
-      {children}
+    <View className="mb-2 flex-row items-center gap-1.5">
+      <Text className="font-data text-[10.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
+        {children}
+      </Text>
       {count != null && count > 0 ? (
-        <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-coral px-1 text-[10px] font-bold tabular-nums text-white">
-          {count}
-        </span>
+        <View className="h-[18px] min-w-[18px] items-center justify-center rounded-full bg-coral px-1">
+          <Text className="text-[10px] font-bold tabular-nums text-white">
+            {count}
+          </Text>
+        </View>
       ) : null}
-    </p>
+    </View>
+  );
+}
+
+function DocumentChip({ file }: { file: UploadFileRef }) {
+  const label = (
+    <Text
+      numberOfLines={1}
+      className={cn(
+        "shrink text-[12px]",
+        file.viewUrl ? "font-medium text-navy" : "text-ink-muted",
+      )}
+    >
+      {file.fileName}
+    </Text>
+  );
+
+  if (!file.viewUrl) {
+    return (
+      <View className="max-w-[220px] flex-row items-center gap-1.5 rounded-full bg-coral-wash py-1.5 pl-2 pr-2.5">
+        <FileText size={14} color={joyaColors.coral} />
+        {label}
+      </View>
+    );
+  }
+
+  const url = file.viewUrl;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${file.fileName} (ouvre le document)`}
+      onPress={() => {
+        void openExternalUrl(url).catch(() =>
+          toast.error("Impossible d'ouvrir ce document."),
+        );
+      }}
+      className="max-w-[220px] flex-row items-center gap-1.5 rounded-full bg-coral-wash py-1.5 pl-2 pr-2.5 active:bg-coral-soft"
+    >
+      <FileText size={14} color={joyaColors.coral} />
+      {label}
+      <ExternalLink size={12} color={joyaColors.coral} style={{ opacity: 0.7 }} />
+    </Pressable>
   );
 }
 
@@ -98,49 +174,30 @@ function DocumentLinks({
   emptyLabel?: string;
 }) {
   if (!files.length) {
-    return <p className="text-[12.5px] text-ink-faint">{emptyLabel}</p>;
+    return <Text className="text-[12.5px] text-ink-faint">{emptyLabel}</Text>;
   }
   return (
-    <ul className="flex flex-wrap gap-1.5">
+    <View className="flex-row flex-wrap gap-1.5">
       {files.map((f) => (
-        <li key={f.fileId} className="max-w-full">
-          {f.viewUrl ? (
-            <a
-              href={f.viewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group/doc inline-flex max-w-[220px] items-center gap-1.5 rounded-full bg-coral-wash py-1.5 pl-2 pr-2.5 text-[12px] font-medium text-navy transition-colors hover:bg-coral-soft hover:text-coral-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral"
-            >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-coral" aria-hidden />
-              <span className="truncate">{f.fileName}</span>
-              <ExternalLink className="h-3 w-3 shrink-0 text-coral/70 opacity-70 group-hover/doc:opacity-100" aria-hidden />
-              <span className="sr-only">(ouvre un nouvel onglet)</span>
-            </a>
-          ) : (
-            <span className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full bg-coral-wash py-1.5 pl-2 pr-2.5 text-[12px] text-ink-muted">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-coral" aria-hidden />
-              <span className="truncate">{f.fileName}</span>
-            </span>
-          )}
-        </li>
+        <DocumentChip key={f.fileId} file={f} />
       ))}
-    </ul>
+    </View>
   );
 }
 
 function CompletionBadge({ completed }: { completed?: boolean }) {
   if (completed) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-navy px-2.5 py-1 text-[11.5px] font-semibold text-white">
-        <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-        Complet
-      </span>
+      <View className="shrink-0 flex-row items-center gap-1 rounded-full bg-navy px-2.5 py-1">
+        <Check size={14} color="#fff" strokeWidth={2.5} />
+        <Text className="text-[11.5px] font-semibold text-white">Complet</Text>
+      </View>
     );
   }
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-2.5 py-1 text-[11.5px] font-semibold text-warning">
-      En cours
-    </span>
+    <View className="shrink-0 flex-row items-center gap-1 rounded-full bg-warning-soft px-2.5 py-1">
+      <Text className="text-[11.5px] font-semibold text-warning">En cours</Text>
+    </View>
   );
 }
 
@@ -149,108 +206,120 @@ function SectionCard({
   icon: Icon,
   completed,
   children,
-  className,
 }: {
   title: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   completed?: boolean;
   children: ReactNode;
-  className?: string;
 }) {
   return (
-    <section
-      className={cn(
-        "flex h-full flex-col rounded-[24px] border border-line bg-white p-5 shadow-joya-sm sm:p-6",
-        className,
-      )}
-    >
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-coral-soft text-coral">
-            <Icon className="h-5 w-5" />
-          </span>
-          <h2 className="truncate font-display text-base font-semibold text-navy">
+    <View className="rounded-[24px] border border-line bg-white p-5 shadow-joya-sm">
+      <View className="mb-4 flex-row items-start justify-between gap-3">
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
+          <View className="h-10 w-10 items-center justify-center rounded-[14px] bg-coral-soft">
+            <Icon size={20} color={joyaColors.coral} />
+          </View>
+          <Text
+            numberOfLines={1}
+            className="min-w-0 flex-1 font-display text-base font-semibold text-navy"
+          >
             {title}
-          </h2>
-        </div>
+          </Text>
+        </View>
         <CompletionBadge completed={completed} />
-      </div>
-      <div className="min-h-0 flex-1">{children}</div>
-    </section>
+      </View>
+      <View>{children}</View>
+    </View>
   );
 }
 
 type OnboardingInfoPreviewProps = {
   summary: OnboardingSummary;
-  variant?: "default" | "verification";
-  /** Hide the page title when embedded inside OnboardingFormCard. */
-  embedded?: boolean;
 };
 
 export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
   const { company, manager, files, energy, site, finance } = summary;
   const displayCompletion = inferDisplayCompletion(summary);
-  const completedCount = SECTION_STEPS.filter((step) => displayCompletion[step]).length;
+  const completedCount = SECTION_STEPS.filter(
+    (step) => displayCompletion[step],
+  ).length;
+
+  const financeDocGroups = [
+    { label: "RIB", files: files.rib },
+    { label: "Déclaration fiscale", files: files.taxDeclaration },
+    { label: "Bilan", files: files.balanceSheets },
+    { label: "Relevés bancaires", files: files.bankStatements },
+  ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <View className="gap-6">
       <JoyaPageHeader
+        className="px-1"
         eyebrow="Mon dossier"
         title="Mes informations"
         description="Récapitulatif de votre dossier d'intégration : entreprise, installation, données énergétiques et documents (lecture seule)."
         meta={
-          <>
-            <span className="inline-flex h-8 items-center rounded-full bg-coral-soft px-3 font-data text-[12.5px] font-medium text-coral-dark">
-              {completedCount}/{SECTION_STEPS.length} sections complètes
-            </span>
-            <span className="inline-flex h-8 items-center gap-2 rounded-full border border-line bg-white px-3 text-[12.5px] font-medium text-navy">
-              Documents
+          <View className="mt-1 flex-row flex-wrap items-center gap-2">
+            <View className="h-8 justify-center rounded-full bg-coral-soft px-3">
+              <Text className="font-data text-[12.5px] font-medium text-coral-dark">
+                {completedCount}/{SECTION_STEPS.length} sections complètes
+              </Text>
+            </View>
+            <View className="h-8 flex-row items-center gap-2 rounded-full border border-line bg-white px-3">
+              <Text className="text-[12.5px] font-medium text-navy">
+                Documents
+              </Text>
               {SECTION_STEPS.map((step) => (
-                <span
+                <View
                   key={step}
-                  className={cn(
-                    "grid h-5 w-5 place-items-center rounded-full",
+                  accessibilityLabel={
                     displayCompletion[step]
-                      ? "bg-coral text-white"
-                      : "bg-slate-100 text-slate-400",
-                  )}
-                  title={
-                    displayCompletion[step] ? "Section complète" : "Section en cours"
+                      ? "Section complète"
+                      : "Section en cours"
                   }
+                  className={cn(
+                    "h-5 w-5 items-center justify-center rounded-full",
+                    displayCompletion[step] ? "bg-coral" : "bg-slate-100",
+                  )}
                 >
-                  <Check className="h-3 w-3" strokeWidth={2.75} aria-hidden />
-                </span>
+                  <Check
+                    size={12}
+                    strokeWidth={2.75}
+                    color={
+                      displayCompletion[step] ? "#fff" : joyaColors.blueLight
+                    }
+                  />
+                </View>
               ))}
-            </span>
-          </>
+            </View>
+          </View>
         }
       />
 
-      <div className="joya-stagger grid items-stretch gap-4 lg:grid-cols-2 lg:gap-5">
+      <View className="gap-4">
         <SectionCard
           title="Entreprise"
           icon={Building2}
           completed={displayCompletion[1]}
         >
-          <dl className="grid grid-cols-1 gap-2 xs:grid-cols-2">
+          <FieldGrid>
             <Field label="Raison sociale" value={company.legal_name} />
             <Field label="Matricule fiscal" value={company.tax_id} />
             <Field label="Gouvernorat" value={company.gouvernorat} />
             <Field label="Secteur" value={company.sector} />
-            <div className="xs:col-span-2">
-              <Field
-                label="Adresse d'installation"
-                value={company.installation_address}
-              />
-            </div>
-          </dl>
-          <div className="mt-4">
+            <Field
+              full
+              label="Adresse d'installation"
+              value={company.installation_address}
+            />
+          </FieldGrid>
+          <View className="mt-4">
             <DocGroupLabel>Documents</DocGroupLabel>
             <DocumentLinks
               files={[...files.tradeRegister, ...files.rne]}
               emptyLabel="Aucun document entreprise"
             />
-          </div>
+          </View>
         </SectionCard>
 
         <SectionCard
@@ -258,18 +327,18 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
           icon={UserCircle}
           completed={displayCompletion[2]}
         >
-          <dl className="grid grid-cols-1 gap-2 xs:grid-cols-2">
+          <FieldGrid>
             <Field label="Nom complet" value={manager.full_name} />
             <Field label="CIN" value={manager.cin_number} />
             <Field label="E-mail" value={manager.email} />
             <Field label="Téléphone" value={manager.phone_number} />
             <Field label="Adresse" value={manager.address} />
             <Field label="Part (%)" value={manager.ownership_pct} />
-          </dl>
-          <div className="mt-4">
+          </FieldGrid>
+          <View className="mt-4">
             <DocGroupLabel>CIN</DocGroupLabel>
             <DocumentLinks files={files.cin} />
-          </div>
+          </View>
         </SectionCard>
 
         <SectionCard
@@ -277,7 +346,7 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
           icon={Zap}
           completed={displayCompletion[3]}
         >
-          <dl className="grid grid-cols-1 gap-2 xs:grid-cols-2">
+          <FieldGrid>
             <Field
               label="Puissance souscrite"
               value={
@@ -286,11 +355,13 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
                   : "—"
               }
             />
-          </dl>
-          <div className="mt-4">
-            <DocGroupLabel count={files.bills.length}>Factures STEG</DocGroupLabel>
+          </FieldGrid>
+          <View className="mt-4">
+            <DocGroupLabel count={files.bills.length}>
+              Factures STEG
+            </DocGroupLabel>
             <DocumentLinks files={files.bills} emptyLabel="Aucune facture" />
-          </div>
+          </View>
         </SectionCard>
 
         <SectionCard
@@ -298,7 +369,7 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
           icon={Home}
           completed={displayCompletion[4]}
         >
-          <dl className="grid grid-cols-1 gap-2 xs:grid-cols-2">
+          <FieldGrid>
             <Field
               label="Statut du site"
               value={onboardingLabels.siteStatus(site.site_status)}
@@ -315,13 +386,15 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
               label="Surface toiture"
               value={onboardingLabels.roofSurface(site.roof_surface)}
             />
-          </dl>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div>
-              <DocGroupLabel count={files.roofImages.length}>Photos toiture</DocGroupLabel>
+          </FieldGrid>
+          <View className="mt-4 gap-3">
+            <View>
+              <DocGroupLabel count={files.roofImages.length}>
+                Photos toiture
+              </DocGroupLabel>
               <DocumentLinks files={files.roofImages} />
-            </div>
-            <div>
+            </View>
+            <View>
               <DocGroupLabel>Technique & propriété</DocGroupLabel>
               <DocumentLinks
                 files={[
@@ -331,17 +404,16 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
                 ]}
                 emptyLabel="Aucun document site"
               />
-            </div>
-          </div>
+            </View>
+          </View>
         </SectionCard>
 
         <SectionCard
           title="Situation financière"
           icon={Wallet}
           completed={displayCompletion[5]}
-          className="lg:col-span-2"
         >
-          <dl className="grid grid-cols-1 gap-2 xs:grid-cols-2 md:grid-cols-4">
+          <FieldGrid>
             <Field
               label="Chiffre d'affaires"
               value={onboardingLabels.annualRevenue(finance.annual_revenue)}
@@ -360,7 +432,7 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
               label="Crédit en cours"
               value={onboardingLabels.bool(finance.current_credit)}
             />
-            {finance.current_credit && (
+            {finance.current_credit ? (
               <Field
                 label="Mensualité crédit"
                 value={
@@ -369,23 +441,18 @@ export function OnboardingInfoPreview({ summary }: OnboardingInfoPreviewProps) {
                     : "—"
                 }
               />
-            )}
-          </dl>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: "RIB", files: files.rib },
-              { label: "Déclaration fiscale", files: files.taxDeclaration },
-              { label: "Bilan", files: files.balanceSheets },
-              { label: "Relevés bancaires", files: files.bankStatements },
-            ].map((group) => (
-              <div key={group.label}>
+            ) : null}
+          </FieldGrid>
+          <View className="mt-4 gap-3">
+            {financeDocGroups.map((group) => (
+              <View key={group.label}>
                 <DocGroupLabel>{group.label}</DocGroupLabel>
                 <DocumentLinks files={group.files} />
-              </div>
+              </View>
             ))}
-          </div>
+          </View>
         </SectionCard>
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }

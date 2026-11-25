@@ -1,8 +1,7 @@
-"use client";
-
-import { Loader2 } from "lucide-react";
+import { ActivityIndicator, Text, View } from "react-native";
 import { useDeviceScope } from "@/contexts/device-scope-context";
 import { cn } from "@/lib/utils";
+import { joyaColors } from "@/theme/colors";
 
 type DeviceScopeLoadingOverlayProps = {
   className?: string;
@@ -18,20 +17,21 @@ export function DeviceScopeLoadingOverlay({
   }
 
   return (
-    <div
+    <View
+      pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      accessibilityState={{ busy: true }}
       className={cn(
-        "pointer-events-none absolute inset-0 z-20 flex items-start justify-center rounded-lg bg-white/50 pt-6 backdrop-blur-[1px]",
+        "absolute inset-0 z-20 items-center rounded-lg bg-white/50 pt-6",
         className,
       )}
-      aria-live="polite"
-      aria-busy="true"
     >
-      <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
-        <Loader2 className="h-4 w-4 animate-spin text-navy" aria-hidden />
-        <span className="text-sm font-medium text-slate-700">
+      <View className="flex-row items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
+        <ActivityIndicator size="small" color={joyaColors.navy} />
+        <Text className="text-sm font-medium text-slate-700">
           Mise à jour des données…
-        </span>
-      </div>
-    </div>
+        </Text>
+      </View>
+    </View>
   );
 }

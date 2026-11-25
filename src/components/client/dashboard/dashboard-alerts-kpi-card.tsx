@@ -1,13 +1,12 @@
-"use client";
-
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { Pressable, Text, View } from "react-native";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import type { DashboardAlert } from "@/types/dashboard";
 import { useDeviceScope } from "@/contexts/device-scope-context";
 import { filterAlertsForDeviceScope } from "@/lib/device-scope/storage";
 import { AlertSourceChip } from "./alert-source-chip";
 import { cn } from "@/lib/utils";
+import { joyaColors } from "@/theme/colors";
 import { JoyaEyebrow } from "@/components/joya";
 import { DashboardAlertsModal } from "./dashboard-alerts-modal";
 
@@ -17,7 +16,6 @@ type DashboardAlertsKpiCardProps = {
 };
 
 const CRITICAL_PREVIEW = 2;
-const ALERTS_PAGE_HREF = "/client/alerts";
 
 function compactTimeLabel(label?: string): string | null {
   if (!label?.trim()) return null;
@@ -34,15 +32,15 @@ function StatChip({
   dotClass: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[16px] border border-line bg-white px-3.5 py-3 shadow-joya-xs">
-      <div>
-        <p className="text-[12px] font-medium text-ink-muted">{label}</p>
-        <p className="font-display text-[1.35rem] font-bold tabular-nums leading-none text-navy">
+    <View className="min-w-0 flex-1 flex-row items-center justify-between gap-2 rounded-[16px] border border-line bg-white px-3.5 py-3">
+      <View>
+        <Text className="text-[12px] font-medium text-ink-muted">{label}</Text>
+        <Text className="font-display text-[1.35rem] font-bold tabular-nums leading-none text-navy">
           {count}
-        </p>
-      </div>
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", dotClass)} aria-hidden />
-    </div>
+        </Text>
+      </View>
+      <View className={cn("h-2 w-2 shrink-0 rounded-full", dotClass)} />
+    </View>
   );
 }
 
@@ -81,104 +79,98 @@ export function DashboardAlertsKpiCard({
 
   return (
     <>
-      <section
+      <View
         className={cn(
-          "flex h-full min-h-[16rem] flex-col overflow-hidden rounded-[28px] border border-line bg-white p-5 shadow-joya-sm sm:p-6",
+          "min-h-[16rem] overflow-hidden rounded-[28px] border border-line bg-white p-5 shadow-sm",
           className,
         )}
       >
-        <header className="flex items-start justify-between gap-3">
-          <div>
+        <View className="flex-row items-start justify-between gap-3">
+          <View>
             <JoyaEyebrow>Surveillance</JoyaEyebrow>
-            <h3 className="mt-1.5 font-display text-[1.45rem] font-bold tracking-tight text-navy">
+            <Text
+              accessibilityRole="header"
+              className="mt-1.5 font-display text-[1.45rem] font-bold tracking-tight text-navy"
+            >
               Alertes
-            </h3>
-          </div>
-          <span
-            className="grid h-8 min-w-8 place-items-center rounded-full bg-coral px-2 font-display text-sm font-bold tabular-nums text-white"
-            aria-label={`${total} alerte${total !== 1 ? "s" : ""}`}
+            </Text>
+          </View>
+          <View
+            accessibilityLabel={`${total} alerte${total !== 1 ? "s" : ""}`}
+            className="h-8 min-w-8 items-center justify-center rounded-full bg-coral px-2"
           >
-            {total}
-          </span>
-        </header>
+            <Text className="font-display text-sm font-bold tabular-nums text-white">
+              {total}
+            </Text>
+          </View>
+        </View>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <View className="mt-4 flex-row gap-2">
           <StatChip label="Critique" count={criticalCount} dotClass="bg-danger" />
           <StatChip label="Attention" count={attentionCount} dotClass="bg-sun" />
           <StatChip label="Info" count={infoCount} dotClass="bg-navy" />
-        </div>
+        </View>
 
-        <div className="mt-3 flex min-h-0 flex-1 flex-col justify-center rounded-[22px] bg-coral-wash px-5 py-8 text-center">
+        <View className="mt-3 flex-1 justify-center rounded-[22px] bg-coral-wash px-5 py-8">
           {criticalRows.length > 0 ? (
-            <div className="space-y-3 text-left">
+            <View className="gap-3">
               {criticalRows.map((alert) => {
                 const time = compactTimeLabel(alert.timeLabel);
                 return (
-                  <div key={alert.id} className="flex items-start gap-2.5">
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-coral" aria-hidden />
-                    <p className="min-w-0 flex-1 text-sm font-semibold leading-snug text-navy">
+                  <View key={alert.id} className="flex-row items-start gap-2.5">
+                    <View className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-coral" />
+                    <Text className="min-w-0 flex-1 text-sm font-semibold leading-snug text-navy">
                       {alert.title}
-                    </p>
+                    </Text>
                     {alert.sourceLabel ? (
                       <AlertSourceChip
                         label={alert.sourceLabel}
-                        variant="modal"
-                        className="max-w-[7rem] shrink-0"
+                        className="max-w-[7rem] shrink-0 border border-line bg-white"
                       />
                     ) : null}
                     {time ? (
-                      <span className="shrink-0 text-xs font-medium tabular-nums text-ink-faint">
+                      <Text className="shrink-0 text-xs font-medium tabular-nums text-ink-faint">
                         {time}
-                      </span>
+                      </Text>
                     ) : null}
-                  </div>
+                  </View>
                 );
               })}
-            </div>
+            </View>
           ) : (
-            <div className="flex flex-col items-center">
-              <span className="grid h-[4.25rem] w-[4.25rem] place-items-center rounded-[22px] bg-white shadow-joya-xs">
-                <ShieldCheck className="h-7 w-7 text-coral" aria-hidden />
-              </span>
-              <p className="mt-4 font-display text-lg font-bold tracking-tight text-navy">
+            <View className="items-center">
+              <View className="h-[4.25rem] w-[4.25rem] items-center justify-center rounded-[22px] bg-white">
+                <ShieldCheck size={28} color={joyaColors.coral} />
+              </View>
+              <Text className="mt-4 font-display text-lg font-bold tracking-tight text-navy">
                 Aucune alerte critique
-              </p>
-              <p className="mt-1.5 max-w-[36ch] text-[13.5px] leading-relaxed text-ink-muted">
+              </Text>
+              <Text className="mt-1.5 text-center text-[13.5px] leading-relaxed text-ink-muted">
                 Votre installation fonctionne normalement.
                 {infoCount > 0
                   ? ` ${infoCount} information${infoCount > 1 ? "s" : ""} ${infoCount > 1 ? "sont" : "est"} disponible${infoCount > 1 ? "s" : ""}.`
                   : null}
-              </p>
-            </div>
+              </Text>
+            </View>
           )}
-        </div>
+        </View>
 
-        <Link
-          href={ALERTS_PAGE_HREF}
-          className="mt-3 inline-flex h-11 items-center justify-center gap-2 rounded-[14px] border border-line bg-white text-[13.5px] font-semibold text-navy transition-colors hover:bg-cream lg:hidden"
+        <Pressable
+          onPress={() => setOpen(true)}
+          accessibilityRole="button"
+          accessibilityHint="Ouvre la liste des alertes"
+          className="mt-3 h-11 flex-row items-center justify-center gap-2 rounded-[14px] border border-line bg-white active:bg-cream"
         >
-          {cta}
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-3 hidden h-11 items-center justify-center gap-2 rounded-[14px] border border-line bg-white text-[13.5px] font-semibold text-navy transition-colors hover:bg-cream lg:inline-flex"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-        >
-          {cta}
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </button>
-      </section>
+          <Text className="text-[13.5px] font-semibold text-navy">{cta}</Text>
+          <ArrowRight size={16} color={joyaColors.navy} />
+        </Pressable>
+      </View>
 
-      <div className="hidden lg:contents">
-        <DashboardAlertsModal
-          open={open}
-          onClose={() => setOpen(false)}
-          alerts={scopedAlerts}
-        />
-      </div>
+      <DashboardAlertsModal
+        open={open}
+        onClose={() => setOpen(false)}
+        alerts={scopedAlerts}
+      />
     </>
   );
 }

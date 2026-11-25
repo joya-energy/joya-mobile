@@ -4,8 +4,9 @@ type NotificationHrefInput = {
 };
 
 const MONITORING = "/client/monitoring";
-const REPORTS = "/client/informations#impact-environnemental";
-const BILLS = "/client/informations#factures";
+// Expo Router has no URL hash on native: the informations screen reads `section`.
+const REPORTS = "/client/informations?section=impact-environnemental";
+const BILLS = "/client/informations?section=factures";
 const INFORMATIONS = "/client/informations";
 const CONSUMPTION = "/client/consumption";
 

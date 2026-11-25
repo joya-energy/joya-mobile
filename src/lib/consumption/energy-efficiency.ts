@@ -1,6 +1,7 @@
 import type { EdgeMetricPoint } from "@/lib/consumption/api";
 import type { SeriesRow } from "@/components/client/consumption/edge-consumption-charts";
 import { SECTORS } from "@/types/const";
+import { appStorage } from "@/platform/storage";
 
 export const STEG_PF_THRESHOLD = 0.8;
 export const METER_SILENCE_HOURS = 3;
@@ -194,9 +195,9 @@ export function loadEfficiencyProfile(
   _ymd?: string,
 ): EnergyEfficiencyProfile {
   const fallback = defaultEfficiencyProfile();
-  if (!siteId || typeof window === "undefined") return fallback;
+  if (!siteId) return fallback;
   try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + siteId);
+    const raw = appStorage.getItem(STORAGE_PREFIX + siteId);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<EnergyEfficiencyProfile> & {
       openTime?: string;
@@ -223,8 +224,8 @@ export function saveEfficiencyProfile(
   siteId: string | null | undefined,
   profile: EnergyEfficiencyProfile,
 ) {
-  if (!siteId || typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_PREFIX + siteId, JSON.stringify(profile));
+  if (!siteId) return;
+  appStorage.setItem(STORAGE_PREFIX + siteId, JSON.stringify(profile));
 }
 
 export function hourFromHm(hm: string): number {

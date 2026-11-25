@@ -1,4 +1,4 @@
-"use client";
+import { Text, View } from "react-native";
 
 type EscoPerformanceScaleProps = {
   percent: number | null;
@@ -29,12 +29,12 @@ export function EscoPerformanceScale({
   const above = hasValue && percent >= 100;
 
   return (
-    <div className="rounded-[18px] bg-coral-wash px-4 py-3.5 sm:px-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[13px] font-medium text-navy">
+    <View className="rounded-[18px] bg-coral-wash px-4 py-3.5">
+      <View className="flex-row items-baseline justify-between gap-3">
+        <Text className="flex-1 text-[13px] font-medium text-navy">
           Performance du mois dernier
-        </p>
-        <p
+        </Text>
+        <Text
           className={
             hasValue
               ? "font-display text-[1.35rem] font-bold tabular-nums leading-none text-coral"
@@ -42,29 +42,35 @@ export function EscoPerformanceScale({
           }
         >
           {display}
-        </p>
-      </div>
-      <div className="relative mt-3 h-2 rounded-full bg-coral/15">
-        <div
-          className="h-full rounded-full bg-coral transition-[width] duration-500"
+        </Text>
+      </View>
+      <View className="relative mt-3 h-2 justify-center rounded-full bg-coral/15">
+        <View
+          className="h-full rounded-full bg-coral"
           style={{ width: `${barPercent}%` }}
         />
         {hasValue ? (
-          <span
-            className="absolute top-1/2 h-3.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-navy-dark"
-            style={{ left: `${tickPercent}%` }}
-            aria-hidden
+          <View
+            pointerEvents="none"
+            className="absolute h-3.5 w-0.5 rounded-full bg-navy-dark"
+            style={{ left: `${tickPercent}%`, top: -3, marginLeft: -1 }}
           />
         ) : null}
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2 text-[12px]">
-        <span className="text-ink-muted">Objectif : 100 %</span>
+      </View>
+      <View className="mt-2 flex-row items-center justify-between gap-2">
+        <Text className="text-[12px] text-ink-muted">Objectif : 100 %</Text>
         {deltaLabel ? (
-          <span className={above ? "font-semibold text-coral" : "font-semibold text-ink-muted"}>
+          <Text
+            className={
+              above
+                ? "text-[12px] font-semibold text-coral"
+                : "text-[12px] font-semibold text-ink-muted"
+            }
+          >
             {deltaLabel}
-          </span>
+          </Text>
         ) : null}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }

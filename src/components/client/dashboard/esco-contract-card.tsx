@@ -1,21 +1,29 @@
-"use client";
-
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Circle, G } from "react-native-svg";
+import Animated, {
+  Easing,
+  useAnimatedProps,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { Calendar, Clock, DollarSign } from "lucide-react";
 import type { DashboardAlert, DashboardEscoContract } from "@/types/dashboard";
 import { cn } from "@/lib/utils";
+import { joyaColors } from "@/theme/colors";
 import { CLIENT_DASHBOARD_MISSING } from "@/lib/dashboard/defaults";
 import { JoyaEyebrow } from "@/components/joya";
+import { CornerGlow } from "./corner-glow";
 import { DashboardAlertsKpiCard } from "./dashboard-alerts-kpi-card";
 import { EscoPerformanceScale } from "./esco-performance-scale";
-
-const ESCO_ROW_GRID =
-  "grid w-full flex-[0_0.5_auto] grid-cols-1 gap-y-0 lg:grid-cols-2 lg:grid-rows-1 lg:gap-x-[30px] lg:gap-y-0 lg:h-full";
 
 type EscoContractCardProps = {
   contract: DashboardEscoContract;
   alerts: DashboardAlert[];
 };
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 function remainingHuman(months: number): string {
   const years = Math.floor(months / 12);
@@ -29,38 +37,49 @@ function remainingHuman(months: number): string {
 function DonutProgress({ percent }: { percent: number }) {
   const r = 22;
   const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.min(100, Math.max(0, percent)) / 100);
+  const clamped = Math.min(100, Math.max(0, percent));
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(clamped / 100, {
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [clamped, progress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: c * (1 - progress.value),
+  }));
 
   return (
-    <div className="relative h-[4.5rem] w-[4.5rem] shrink-0">
-      <svg viewBox="0 0 56 56" className="h-full w-full -rotate-90">
-        <circle
-          cx="28"
-          cy="28"
-          r={r}
-          fill="none"
-          stroke="rgba(255,255,255,0.16)"
-          strokeWidth="5"
-        />
-        <circle
-          cx="28"
-          cy="28"
-          r={r}
-          fill="none"
-          stroke="rgba(255,255,255,0.92)"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          className="transition-[stroke-dashoffset] duration-500"
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-display text-[1.05rem] font-bold tabular-nums leading-none text-white">
-          {percent}%
-        </span>
-      </div>
-    </div>
+    <View className="h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center">
+      <Svg width="100%" height="100%" viewBox="0 0 56 56">
+        <G rotation={-90} origin="28, 28">
+          <Circle
+            cx={28}
+            cy={28}
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.16)"
+            strokeWidth={5}
+          />
+          <AnimatedCircle
+            cx={28}
+            cy={28}
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.92)"
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            animatedProps={animatedProps}
+          />
+        </G>
+      </Svg>
+      <Text className="absolute font-display text-[1.05rem] font-bold tabular-nums leading-none text-white">
+        {percent}%
+      </Text>
+    </View>
   );
 }
 
@@ -80,24 +99,27 @@ function MetricMiniCard({
   label: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col rounded-[18px] px-3.5 py-3.5", surface)}>
-      <div className={cn("grid h-9 w-9 place-items-center rounded-[12px]", chip)}>
+    <View className={cn("min-w-0 flex-1 rounded-[18px] px-3.5 py-3.5", surface)}>
+      <View className={cn("h-9 w-9 items-center justify-center rounded-[12px]", chip)}>
         {icon}
-      </div>
-      <p className="mt-3 leading-none">
-        <span className="font-display text-[1.35rem] font-bold tabular-nums tracking-tight text-navy">
-          {value}
-        </span>
+      </View>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        className="mt-3 font-display text-[1.35rem] font-bold tabular-nums leading-none tracking-tight text-navy"
+      >
+        {value}
         {valueSuffix ? (
-          <span className="ml-1 text-[12px] font-semibold text-ink-faint">
+          <Text className="text-[12px] font-semibold text-ink-faint">
+            {" "}
             {valueSuffix}
-          </span>
+          </Text>
         ) : null}
-      </p>
-      <p className="mt-1.5 text-[12px] font-medium leading-snug text-ink-muted">
+      </Text>
+      <Text className="mt-1.5 text-[12px] font-medium leading-snug text-ink-muted">
         {label}
-      </p>
-    </div>
+      </Text>
+    </View>
   );
 }
 
@@ -111,41 +133,42 @@ function YearBlock({
   isCurrentYear: boolean;
 }) {
   return (
-    <div
+    <View
       className={cn(
-        "flex min-w-0 flex-1 flex-col rounded-[14px] px-1.5 py-2",
-        isCurrentYear ? "bg-white/12" : "bg-white/[0.06]",
+        "min-w-[4.25rem] flex-1 rounded-[14px] px-1.5 py-2",
+        isCurrentYear ? "bg-white/[0.12]" : "bg-white/[0.06]",
       )}
     >
-      <p className="mb-1.5 text-center font-data text-[10px] font-medium text-white/70">
+      <Text className="mb-1.5 text-center font-data text-[10px] font-medium text-white/70">
         {label}
-      </p>
-      <div className="grid grid-cols-4 gap-1">
+      </Text>
+      <View className="flex-row flex-wrap justify-center gap-1">
         {months.map((m, i) => (
-          <span
+          <View
             key={`${label}-${i}`}
             className={cn(
-              "aspect-square w-full max-w-[0.7rem] justify-self-center rounded-[3px]",
+              "h-[0.7rem] w-[0.7rem] rounded-[3px]",
               m.filled ? "bg-coral" : "bg-white/20",
             )}
-            aria-hidden
           />
         ))}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
 
 export function EscoContractCard({ contract, alerts }: EscoContractCardProps) {
   if (!contract.configured) {
     return (
-      <div className={ESCO_ROW_GRID}>
-        <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[28px] border border-dashed border-line-strong bg-white px-6 text-center text-sm leading-relaxed text-ink-muted shadow-joya-sm lg:min-h-[26rem]">
-          Le contrat ESCO n&apos;est pas encore configuré. L&apos;équipe JOYA renseignera
-          le montant mensuel et la date de fin depuis votre profil.
-        </div>
-        <DashboardAlertsKpiCard alerts={alerts} className="h-full" />
-      </div>
+      <View className="w-full gap-5">
+        <View className="min-h-[16rem] items-center justify-center rounded-[28px] border border-dashed border-line-strong bg-white px-6">
+          <Text className="text-center text-sm leading-relaxed text-ink-muted">
+            Le contrat ESCO n&apos;est pas encore configuré. L&apos;équipe JOYA renseignera
+            le montant mensuel et la date de fin depuis votre profil.
+          </Text>
+        </View>
+        <DashboardAlertsKpiCard alerts={alerts} />
+      </View>
     );
   }
 
@@ -164,56 +187,70 @@ export function EscoContractCard({ contract, alerts }: EscoContractCardProps) {
   const approxYears = Math.max(1, Math.round(contract.totalMonths / 12));
 
   return (
-    <div className={ESCO_ROW_GRID}>
-      <section className="flex flex-col overflow-hidden rounded-[28px] border border-line bg-white p-5 shadow-joya-sm sm:p-6 lg:min-h-[26rem]">
-        <header className="flex items-start justify-between gap-3">
-          <div>
+    <View className="w-full gap-5">
+      <View className="overflow-hidden rounded-[28px] border border-line bg-white p-5 shadow-sm">
+        <View className="flex-row items-start justify-between gap-3">
+          <View className="min-w-0 flex-1">
             <JoyaEyebrow>Contrat ESCO</JoyaEyebrow>
-            <h3 className="mt-1.5 font-display text-[1.45rem] font-bold tracking-tight text-navy">
+            <Text
+              accessibilityRole="header"
+              className="mt-1.5 font-display text-[1.45rem] font-bold tracking-tight text-navy"
+            >
               Suivi du contrat
-            </h3>
-          </div>
-          <span
+            </Text>
+          </View>
+          <View
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+              "shrink-0 flex-row items-center gap-1.5 rounded-full border px-2.5 py-1",
               contract.status === "active"
-                ? "border-line bg-white text-navy"
+                ? "border-line bg-white"
                 : contract.status === "ended"
-                  ? "border-line bg-slate-50 text-ink-muted"
-                  : "border-warning/20 bg-warning-soft text-warning",
+                  ? "border-line bg-slate-50"
+                  : "border-warning/20 bg-warning-soft",
             )}
           >
-            <span
+            <View
               className={cn(
                 "h-1.5 w-1.5 rounded-full",
                 contract.status === "active" ? "bg-navy" : "bg-slate-400",
               )}
             />
-            {contract.statusLabel}
-          </span>
-        </header>
+            <Text
+              className={cn(
+                "text-xs font-semibold",
+                contract.status === "active"
+                  ? "text-navy"
+                  : contract.status === "ended"
+                    ? "text-ink-muted"
+                    : "text-warning",
+              )}
+            >
+              {contract.statusLabel}
+            </Text>
+          </View>
+        </View>
 
-        <div className="mt-4 grid grid-cols-1 gap-2 xs:grid-cols-3">
+        <View className="mt-4 gap-2 xs:flex-row">
           <MetricMiniCard
             surface="bg-coral-wash"
-            chip="bg-white/80 text-coral"
-            icon={<DollarSign className="h-4 w-4" />}
+            chip="bg-white/80"
+            icon={<DollarSign size={16} color={joyaColors.coral} />}
             value={monthlyDisplay}
             valueSuffix={monthlyDisplay !== CLIENT_DASHBOARD_MISSING ? "TND" : undefined}
             label="Montant mensuel"
           />
           <MetricMiniCard
             surface="border border-line bg-white"
-            chip="bg-slate-100 text-navy"
-            icon={<Clock className="h-4 w-4" />}
+            chip="bg-slate-100"
+            icon={<Clock size={16} color={joyaColors.navy} />}
             value={String(contract.totalMonths)}
             valueSuffix="mois"
             label={`Engagement · ≈ ${approxYears} an${approxYears > 1 ? "s" : ""}`}
           />
           <MetricMiniCard
             surface="border border-line bg-white"
-            chip="bg-cream-2 text-navy"
-            icon={<Calendar className="h-4 w-4" />}
+            chip="bg-cream-2"
+            icon={<Calendar size={16} color={joyaColors.navy} />}
             value={contract.endLabel}
             label={
               contract.monthsUntilEnd > 0
@@ -221,34 +258,48 @@ export function EscoContractCard({ contract, alerts }: EscoContractCardProps) {
                 : "Échéance atteinte"
             }
           />
-        </div>
+        </View>
 
-        <div className="relative isolate mt-3 overflow-hidden rounded-[22px] bg-[linear-gradient(160deg,#1a4468_0%,rgb(var(--joya-navy-rgb))_46%,rgb(var(--joya-navy-dark-rgb))_100%)] px-4 py-4 text-white sm:px-5">
-          <span
-            className="pointer-events-none absolute -bottom-10 -right-8 h-40 w-40 rounded-full bg-[rgb(148_92_168/0.42)] blur-2xl"
-            aria-hidden
+        <View className="mt-3 overflow-hidden rounded-[22px] px-4 py-4">
+          <LinearGradient
+            pointerEvents="none"
+            colors={["#1a4468", joyaColors.navy, joyaColors.navyDark]}
+            locations={[0, 0.46, 1]}
+            start={{ x: 0.3, y: 0 }}
+            end={{ x: 0.7, y: 1 }}
+            style={StyleSheet.absoluteFill}
           />
-          <div className="relative flex items-center gap-4">
+          <CornerGlow color="#945ca8" opacity={0.5} cx={1} cy={1} />
+          <View className="flex-row items-center gap-4">
             <DonutProgress percent={contract.durationPercent} />
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-[1.15rem] font-bold tracking-tight">
+            <View className="min-w-0 flex-1">
+              <Text className="font-display text-[1.15rem] font-bold tracking-tight text-white">
                 {contract.elapsedMonthsLabel}
-              </p>
-              <p className="mt-0.5 text-[12.5px] text-white/60">
+              </Text>
+              <Text className="mt-0.5 text-[12.5px] text-white/60">
                 Progression du contrat
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-white/80">
-                  {contract.elapsedMonths} mois passés
-                </span>
-                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11.5px] text-white/80">
-                  {remainingHuman(contract.monthsUntilEnd)}
-                </span>
-              </div>
-            </div>
-          </div>
+              </Text>
+              <View className="mt-2 flex-row flex-wrap gap-1.5">
+                <View className="rounded-full bg-white/10 px-2.5 py-0.5">
+                  <Text className="text-[11.5px] text-white/80">
+                    {contract.elapsedMonths} mois passés
+                  </Text>
+                </View>
+                <View className="rounded-full bg-white/10 px-2.5 py-0.5">
+                  <Text className="text-[11.5px] text-white/80">
+                    {remainingHuman(contract.monthsUntilEnd)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
 
-          <div className="relative mt-4 flex gap-1.5 overflow-x-auto pb-1">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mt-4"
+            contentContainerStyle={{ flexGrow: 1, gap: 6, paddingBottom: 4 }}
+          >
             {contract.years.map((year, index) => (
               <YearBlock
                 key={year.label}
@@ -257,22 +308,26 @@ export function EscoContractCard({ contract, alerts }: EscoContractCardProps) {
                 isCurrentYear={index === currentYearIndex}
               />
             ))}
-          </div>
-          <div className="relative mt-2 flex justify-between font-data text-[11px] text-white/50">
-            <span>{contract.startLabel}</span>
-            <span>{contract.endLabel}</span>
-          </div>
-        </div>
+          </ScrollView>
+          <View className="mt-2 flex-row justify-between">
+            <Text className="font-data text-[11px] text-white/50">
+              {contract.startLabel}
+            </Text>
+            <Text className="font-data text-[11px] text-white/50">
+              {contract.endLabel}
+            </Text>
+          </View>
+        </View>
 
-        <div className="mt-3">
+        <View className="mt-3">
           <EscoPerformanceScale
             percent={contract.monthlyPerformancePercent}
             missingLabel={CLIENT_DASHBOARD_MISSING}
           />
-        </div>
-      </section>
+        </View>
+      </View>
 
-      <DashboardAlertsKpiCard alerts={alerts} className="h-full" />
-    </div>
+      <DashboardAlertsKpiCard alerts={alerts} />
+    </View>
   );
 }

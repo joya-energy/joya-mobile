@@ -1,124 +1,85 @@
-"use client";
-
-import { useCallback, useEffect, useState } from "react";
-import { Download, FileText, Loader2, ScrollText, Shield } from "lucide-react";
-import { toast } from "sonner";
+import { Text, View } from "react-native";
+import { FileText, ScrollText, Shield, type LucideIcon } from "lucide-react-native";
 import { JoyaEmptyState } from "@/components/joya";
 import {
   contractsApi,
   type ClientContractFile,
   type ClientContractsResponse,
 } from "@/lib/company/contracts-api";
+import { openExternalUrl } from "@/lib/files/open-external-url";
+import { toast } from "@/lib/toast";
+import { joyaColors } from "@/theme/colors";
+import {
+  CardLoading,
+  DownloadButton,
+  InfoCardHeader,
+  InfoCardShell,
+} from "./info-card-kit";
+import { useCardData } from "./use-card-data";
+import { formatLongDate } from "./use-period-filters";
 
-const GROUPS = [
-  {
-    key: "insurance" as const,
-    title: "Assurance",
-    icon: Shield,
-  },
-  {
-    key: "warranty" as const,
-    title: "Garanties",
-    icon: ScrollText,
-  },
-  {
-    key: "contract" as const,
-    title: "Contrat",
-    icon: FileText,
-  },
+const GROUPS: {
+  key: "insurance" | "warranty" | "contract";
+  title: string;
+  icon: LucideIcon;
+}[] = [
+  { key: "insurance", title: "Assurance", icon: Shield },
+  { key: "warranty", title: "Garanties", icon: ScrollText },
+  { key: "contract", title: "Contrat", icon: FileText },
 ];
 
-function formatAddedDate(value: string | null) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
-
 function FileRow({ file }: { file: ClientContractFile }) {
-  const added = formatAddedDate(file.createdAt);
+  const added = formatLongDate(file.createdAt);
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-navy">{file.fileName}</p>
+    <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3">
+      <View className="min-w-0 flex-1">
+        <Text numberOfLines={2} className="text-sm font-semibold text-navy">
+          {file.fileName}
+        </Text>
         {added ? (
-          <p className="mt-0.5 text-xs text-ink-faint">Ajouté le {added}</p>
+          <Text className="mt-0.5 text-xs text-ink-faint">Ajouté le {added}</Text>
         ) : null}
-      </div>
+      </View>
       {file.viewUrl ? (
-        <a
-          href={file.viewUrl}
-          target="_blank"
-          rel="noreferrer"
-          download={file.fileName}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-white px-3 text-[13px] font-medium text-navy transition-colors hover:border-coral hover:text-coral"
-        >
-          <Download className="h-3.5 w-3.5" aria-hidden />
-          Télécharger
-        </a>
+        <DownloadButton
+          onPress={() => {
+            void openExternalUrl(file.viewUrl as string).catch(() =>
+              toast.error("Impossible d'ouvrir ce document."),
+            );
+          }}
+        />
       ) : (
-        <p className="shrink-0 text-xs text-ink-faint">Lien indisponible</p>
+        <Text className="shrink-0 text-xs text-ink-faint">Lien indisponible</Text>
       )}
-    </div>
+    </View>
   );
 }
 
+const fetchContracts = () => contractsApi.list();
+const NO_CONTRACTS = null as ClientContractsResponse | null;
+
 export function ClientContractsCard() {
-  const [data, setData] = useState<ClientContractsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await contractsApi.list());
-    } catch {
-      setData(null);
-      toast.error("Impossible de charger vos contrats.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { data, loading } = useCardData(
+    fetchContracts,
+    NO_CONTRACTS,
+    "Impossible de charger vos contrats.",
+  );
 
   const total = data
     ? data.insurance.length + data.warranty.length + data.contract.length
     : 0;
 
   return (
-    <section
-      id="mes-contrats"
-      className="scroll-mt-24 overflow-hidden rounded-[24px] border border-line bg-white shadow-joya-sm"
-    >
-      <div className="flex items-center gap-3 border-b border-line px-5 py-5 sm:px-6">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] bg-cream-2 text-coral">
-          <FileText className="h-5 w-5" aria-hidden />
-        </span>
-        <div>
-          <p className="joya-eyebrow">Documents</p>
-          <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-navy">
-            Mes contrats
-          </h2>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
-            Assurance, garanties et contrat déposés par JOYA
-          </p>
-        </div>
-      </div>
+    <InfoCardShell>
+      <InfoCardHeader
+        icon={FileText}
+        eyebrow="Documents"
+        title="Mes contrats"
+        description="Assurance, garanties et contrat déposés par JOYA"
+      />
 
       {loading ? (
-        <div
-          className="flex items-center justify-center gap-2 py-12 text-sm text-ink-muted"
-          role="status"
-        >
-          <Loader2 className="h-4 w-4 animate-spin text-coral" />
-          Chargement des contrats…
-        </div>
+        <CardLoading label="Chargement des contrats…" />
       ) : !data || total === 0 ? (
         <JoyaEmptyState
           icon={FileText}
@@ -126,35 +87,39 @@ export function ClientContractsCard() {
           description="Vos contrats, assurances et garanties apparaîtront ici dès que l'équipe JOYA les aura déposés."
         />
       ) : (
-        <div className="grid gap-5 px-5 py-5 sm:px-6">
+        <View className="gap-5 px-5 py-5">
           {GROUPS.map((group) => {
             const files = data[group.key];
             const Icon = group.icon;
             return (
-              <div key={group.key}>
-                <div className="mb-2.5 flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-coral" aria-hidden />
-                  <h3 className="text-sm font-semibold text-navy">{group.title}</h3>
-                </div>
+              <View key={group.key}>
+                <View className="mb-2.5 flex-row items-center gap-2">
+                  <Icon size={16} color={joyaColors.coral} />
+                  <Text className="text-sm font-semibold text-navy">
+                    {group.title}
+                  </Text>
+                </View>
                 {files.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-line bg-cream px-4 py-4 text-center text-[13px] text-ink-muted">
-                    Aucun fichier
-                  </p>
+                  <View className="rounded-xl border border-dashed border-line bg-cream px-4 py-4">
+                    <Text className="text-center text-[13px] text-ink-muted">
+                      Aucun fichier
+                    </Text>
+                  </View>
                 ) : (
-                  <div className="grid gap-2">
+                  <View className="gap-2">
                     {files.map((file) => (
                       <FileRow
                         key={file.fileId || file.fileName}
                         file={file}
                       />
                     ))}
-                  </div>
+                  </View>
                 )}
-              </div>
+              </View>
             );
           })}
-        </div>
+        </View>
       )}
-    </section>
+    </InfoCardShell>
   );
 }

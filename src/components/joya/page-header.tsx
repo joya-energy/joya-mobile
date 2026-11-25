@@ -109,23 +109,74 @@ export function JoyaPageHeader({
   );
 }
 
+type JoyaSectionHeaderProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  index?: number | string;
+  icon?: ReactNode;
+  iconVariant?: "wash" | "filled";
+  indexVariant?: "wash" | "filled";
+  actions?: ReactNode;
+  className?: string;
+  /** Web parity prop — ignored on native (always Text). */
+  as?: "h2" | "h3";
+};
+
+/** Section title — numbered variant matches the web report header. */
 export function JoyaSectionHeader({
   title,
   description,
+  index,
+  icon,
+  iconVariant = "wash",
+  indexVariant = "wash",
+  actions,
   className,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  className?: string;
-}) {
+}: JoyaSectionHeaderProps) {
+  const chip =
+    index != null ? (
+      <View
+        className={cn(
+          "h-10 w-10 items-center justify-center rounded-[12px]",
+          indexVariant === "filled" ? "bg-coral" : "bg-coral-soft",
+        )}
+      >
+        <Text
+          className={cn(
+            "font-data text-[13px] font-semibold tabular-nums",
+            indexVariant === "filled" ? "text-white" : "text-coral-dark",
+          )}
+        >
+          {typeof index === "number" ? String(index).padStart(2, "0") : index}
+        </Text>
+      </View>
+    ) : icon ? (
+      <View
+        className={cn(
+          "h-10 w-10 items-center justify-center rounded-[12px]",
+          iconVariant === "filled" ? "bg-coral" : "bg-coral-soft",
+        )}
+      >
+        {icon}
+      </View>
+    ) : null;
+
   return (
-    <View className={cn("mb-3 gap-1", className)}>
-      <Text className="font-display text-base font-semibold text-navy">
-        {title}
-      </Text>
-      {description ? (
-        <Text className="text-sm text-ink-muted">{description}</Text>
-      ) : null}
+    <View className={cn("mb-3 gap-2", className)}>
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
+          {chip}
+          <View className="min-w-0 flex-1 gap-1">
+            <Text className="font-display text-base font-semibold text-navy">
+              {title}
+            </Text>
+            {description ? (
+              <Text className="text-sm text-ink-muted">{description}</Text>
+            ) : null}
+          </View>
+        </View>
+        {actions}
+      </View>
     </View>
   );
 }
